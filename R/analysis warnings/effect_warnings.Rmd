@@ -1,0 +1,639 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(magrittr)
+library(AER)
+library(stargazer)
+library(ggplot2)
+library(knitr) 
+library(kableExtra)
+library(magick)
+library(devtools)
+library(plm)
+library(clubSandwich)
+```
+
+
+# Load data
+```{r}
+df <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/210217 Reporte Postulaciones MRUN v2 CB.csv", header=TRUE, sep=',')
+df <- separate(data = df, col = FECHA_POSTULACION, into=c("FECHA", "HORA"), sep=" ")
+```
+
+```{r}
+df %<>% mutate(after_intervention = ifelse((FECHA == '2021-02-14' & strptime(HORA, "%H:%M") >= strptime("11:49", "%H:%M") |
+                                           (FECHA > '2021-02-14')   ) , 1, 0))
+```
+
+```{r}
+before <- df %>% filter(after_intervention == 0) %>% group_by(MRUN) %>% dplyr::slice(which.max(FOLIO_POSTULACION)) %>% dplyr::select(MRUN, CAR_CODIGO_1PREFER, CAR_CODIGO_2PREFER, CAR_CODIGO_3PREFER, CAR_CODIGO_4PREFER, CAR_CODIGO_5PREFER, CAR_CODIGO_6PREFER, CAR_CODIGO_7PREFER, CAR_CODIGO_8PREFER, CAR_CODIGO_9PREFER, CAR_CODIGO_10PREFER)
+colnames(before) <- c("MRUN","CAR_CODIGO_1PREFER_before", "CAR_CODIGO_2PREFER_before", "CAR_CODIGO_3PREFER_before", "CAR_CODIGO_4PREFER_before", "CAR_CODIGO_5PREFER_before", "CAR_CODIGO_6PREFER_before", "CAR_CODIGO_7PREFER_before", "CAR_CODIGO_8PREFER_before", "CAR_CODIGO_9PREFER_before", "CAR_CODIGO_10PREFER_before")
+
+after <- df %>% filter(after_intervention == 1) %>% group_by(MRUN) %>% dplyr::slice(which.max(FOLIO_POSTULACION)) %>% dplyr::select(MRUN, CAR_CODIGO_1PREFER, CAR_CODIGO_2PREFER, CAR_CODIGO_3PREFER, CAR_CODIGO_4PREFER, CAR_CODIGO_5PREFER, CAR_CODIGO_6PREFER, CAR_CODIGO_7PREFER, CAR_CODIGO_8PREFER, CAR_CODIGO_9PREFER, CAR_CODIGO_10PREFER)
+colnames(after) <- c("MRUN", "CAR_CODIGO_1PREFER_after", "CAR_CODIGO_2PREFER_after", "CAR_CODIGO_3PREFER_after", "CAR_CODIGO_4PREFER_after", "CAR_CODIGO_5PREFER_after", "CAR_CODIGO_6PREFER_after", "CAR_CODIGO_7PREFER_after", "CAR_CODIGO_8PREFER_after", "CAR_CODIGO_9PREFER_after", "CAR_CODIGO_10PREFER_after")
+```
+
+```{r}
+last <- df %>% group_by(MRUN) %>% dplyr::slice(which.max(FOLIO_POSTULACION)) %>% dplyr::select(MRUN, FOLIO_POSTULACION, FECHA, CAR_CODIGO_1PREFER, CAR_CODIGO_2PREFER, CAR_CODIGO_3PREFER, CAR_CODIGO_4PREFER, CAR_CODIGO_5PREFER, CAR_CODIGO_6PREFER, CAR_CODIGO_7PREFER, CAR_CODIGO_8PREFER, CAR_CODIGO_9PREFER, CAR_CODIGO_10PREFER, ESTADO_POSTULACION, PUNTAJE_CARR1, PUNTAJE_CARR2, PUNTAJE_CARR3, PUNTAJE_CARR4, PUNTAJE_CARR5, PUNTAJE_CARR6, PUNTAJE_CARR7, PUNTAJE_CARR8, PUNTAJE_CARR9, PUNTAJE_CARR10)
+```
+
+```{r}
+write.csv(last, "/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/Reporte_diario_postulaciones_last_mrun.csv", row.names=FALSE)
+```
+
+```{r}
+last <- df %>% group_by(MRUN) %>% dplyr::slice(which.max(FOLIO_POSTULACION)) %>% dplyr::select(MRUN, FOLIO_POSTULACION, FECHA, CAR_CODIGO_1PREFER, CAR_CODIGO_2PREFER, CAR_CODIGO_3PREFER, CAR_CODIGO_4PREFER, CAR_CODIGO_5PREFER, CAR_CODIGO_6PREFER, CAR_CODIGO_7PREFER, CAR_CODIGO_8PREFER, CAR_CODIGO_9PREFER, CAR_CODIGO_10PREFER, ESTADO_POSTULACION, PUNTAJE_CARR1, PUNTAJE_CARR2, PUNTAJE_CARR3, PUNTAJE_CARR4, PUNTAJE_CARR5, PUNTAJE_CARR6, PUNTAJE_CARR7, PUNTAJE_CARR8, PUNTAJE_CARR9, PUNTAJE_CARR10)
+```
+
+```{r}
+before_to_merge <- df %>% filter(after_intervention == 0) %>% group_by(MRUN) %>% dplyr::slice(which.max(FOLIO_POSTULACION)) %>% dplyr::select(MRUN, FOLIO_POSTULACION, FECHA, CAR_CODIGO_1PREFER, CAR_CODIGO_2PREFER, CAR_CODIGO_3PREFER, CAR_CODIGO_4PREFER, CAR_CODIGO_5PREFER, CAR_CODIGO_6PREFER, CAR_CODIGO_7PREFER, CAR_CODIGO_8PREFER, CAR_CODIGO_9PREFER, CAR_CODIGO_10PREFER, ESTADO_POSTULACION, PUNTAJE_CARR1, PUNTAJE_CARR2, PUNTAJE_CARR3, PUNTAJE_CARR4, PUNTAJE_CARR5, PUNTAJE_CARR6, PUNTAJE_CARR7, PUNTAJE_CARR8, PUNTAJE_CARR9, PUNTAJE_CARR10)
+```
+
+
+```{r}
+last_to_merge <- last %>% filter(!(MRUN %in% before_to_merge$MRUN))
+```
+
+```{r}
+full_with_before <- rbind(before_to_merge, last_to_merge)
+```
+
+```{r}
+write.csv(full_with_before, "/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/Reporte_diario_postulaciones_before_merged_last_mrun.csv", row.names=FALSE)
+```
+
+
+
+```{r}
+mg <- merge(before, after, by="MRUN")
+```
+
+```{r}
+saveRDS(mg,"/Users/iriosu/Dropbox/Mistakes/Code/R/analysis warnings/Data/application_before_and_after.rds")
+```
+
+```{r}
+load("/Users/iriosu/Dropbox/Mistakes/Code/R/analysis warnings/Data/AppList.Rdata")
+load("/Users/iriosu/Dropbox/Mistakes/Code/R/analysis warnings/Data/appRCT.Rdata")
+load("/Users/iriosu/Dropbox/Mistakes/Code/R/analysis warnings/Data/Falta_PorAbrir_List.Rdata")
+```
+
+```{r}
+fpa <- Falta_PorAbrir_List
+colnames(fpa) <- c("MRUN")
+```
+
+```{r}
+probs <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2021/applications_and_probs.csv", header=TRUE, sep=';')
+probs %<>% mutate(any_low_prob = ifelse( prob_level_1 == 1 |
+                                          prob_level_2 == 1 |
+                                          prob_level_3 == 1 |
+                                          prob_level_4 == 1 |
+                                          prob_level_5 == 1 |
+                                          prob_level_6 == 1 |
+                                          prob_level_7 == 1 |
+                                          prob_level_8 == 1 |
+                                          prob_level_9 == 1 |
+                                          prob_level_10 == 1, 1, 0))
+```
+
+```{r}
+probs_last <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2021/applications_and_probs_last.csv", header=TRUE, sep=';')
+probs_last %<>% mutate(any_low_prob = ifelse( prob_level_1 == 1 |
+                                          prob_level_2 == 1 |
+                                          prob_level_3 == 1 |
+                                          prob_level_4 == 1 |
+                                          prob_level_5 == 1 |
+                                          prob_level_6 == 1 |
+                                          prob_level_7 == 1 |
+                                          prob_level_8 == 1 |
+                                          prob_level_9 == 1 |
+                                          prob_level_10 == 1, 1, 0))
+```
+
+```{r}
+probs %<>% mutate(num_alerts = prob_level_1 + prob_level_2 + prob_level_3 + prob_level_4 + prob_level_5 + prob_level_6 + prob_level_7 + prob_level_8 + prob_level_9 + prob_level_10)
+
+probs_last %<>% mutate(num_alerts = prob_level_1 + prob_level_2 + prob_level_3 + prob_level_4 + prob_level_5 + prob_level_6 + prob_level_7 + prob_level_8 + prob_level_9 + prob_level_10)
+```
+
+
+
+# Preprocessing of data
+
+```{r}
+ta <- appList %>% filter(!is.na(Treatment)) %>% filter(Treatment <= 2)
+fpa$view <- 0
+
+ta <- merge(ta, fpa, by.x="mrun", by.y="MRUN", all.x=TRUE)
+ta$view[is.na(ta$view)] <- 1
+
+ta <- merge(ta, before, by.x="mrun", by.y="MRUN", all.x=TRUE)
+ta <- merge(ta, after, by.x="mrun", by.y="MRUN", all.x=TRUE)
+
+ta %<>% mutate(applied_before = ifelse(mrun %in% before$MRUN, 1, 0), 
+               applied_after = ifelse(mrun %in% after$MRUN, 1, 0))
+ta %<>% mutate(CAR_CODIGO_1PREFER_after = ifelse(applied_after == 0, CAR_CODIGO_1PREFER_before, CAR_CODIGO_1PREFER_after), 
+               CAR_CODIGO_2PREFER_after = ifelse(applied_after == 0, CAR_CODIGO_2PREFER_before, CAR_CODIGO_2PREFER_after),
+               CAR_CODIGO_3PREFER_after = ifelse(applied_after == 0, CAR_CODIGO_3PREFER_before, CAR_CODIGO_3PREFER_after),
+               CAR_CODIGO_4PREFER_after = ifelse(applied_after == 0, CAR_CODIGO_4PREFER_before, CAR_CODIGO_4PREFER_after),
+               CAR_CODIGO_5PREFER_after = ifelse(applied_after == 0, CAR_CODIGO_5PREFER_before, CAR_CODIGO_5PREFER_after),
+               CAR_CODIGO_6PREFER_after = ifelse(applied_after == 0, CAR_CODIGO_6PREFER_before, CAR_CODIGO_6PREFER_after),
+               CAR_CODIGO_7PREFER_after = ifelse(applied_after == 0, CAR_CODIGO_7PREFER_before, CAR_CODIGO_7PREFER_after),
+               CAR_CODIGO_8PREFER_after = ifelse(applied_after == 0, CAR_CODIGO_8PREFER_before, CAR_CODIGO_8PREFER_after),
+               CAR_CODIGO_9PREFER_after = ifelse(applied_after == 0, CAR_CODIGO_9PREFER_before, CAR_CODIGO_9PREFER_after),
+               CAR_CODIGO_10PREFER_after = ifelse(applied_after == 0, CAR_CODIGO_10PREFER_before, CAR_CODIGO_10PREFER_after))
+```
+
+
+```{r}
+ta <- merge(ta, probs[,c("MRUN", "any_low_prob", "overall_prob", "num_alerts")], by.x="mrun", by.y="MRUN", all.x=TRUE)
+ta %<>% dplyr::rename(any_low_prob_before = any_low_prob,  overall_prob_before = overall_prob, num_alerts_before = num_alerts )
+ta[is.na(ta)] <- 0
+ta[ta == -1] <- 0
+
+ta <- merge(ta, probs_last[,c("MRUN", "any_low_prob", "overall_prob", "num_alerts")], by.x="mrun", by.y="MRUN", all.x=TRUE)
+ta %<>% dplyr::rename(any_low_prob_after = any_low_prob,  overall_prob_after = overall_prob, num_alerts_after = num_alerts )
+ta[is.na(ta)] <- 0
+ta[ta == -1] <- 0
+```
+
+```{r}
+ta %<>% mutate(n_apps_before = (CAR_CODIGO_1PREFER_before > 0) + (CAR_CODIGO_2PREFER_before > 0) + 
+                                (CAR_CODIGO_3PREFER_before > 0) + (CAR_CODIGO_4PREFER_before > 0) +
+                                (CAR_CODIGO_5PREFER_before > 0) + (CAR_CODIGO_6PREFER_before > 0) +
+                                (CAR_CODIGO_7PREFER_before > 0) + (CAR_CODIGO_8PREFER_before > 0) +
+                                (CAR_CODIGO_9PREFER_before > 0) + (CAR_CODIGO_10PREFER_before > 0), 
+                n_apps_after = (CAR_CODIGO_1PREFER_after > 0) + (CAR_CODIGO_2PREFER_after > 0) + 
+                                (CAR_CODIGO_3PREFER_after > 0) + (CAR_CODIGO_4PREFER_after > 0) +
+                                (CAR_CODIGO_5PREFER_after > 0) + (CAR_CODIGO_6PREFER_after > 0) +
+                                (CAR_CODIGO_7PREFER_after > 0) + (CAR_CODIGO_8PREFER_after > 0) +
+                                (CAR_CODIGO_9PREFER_after > 0) + (CAR_CODIGO_10PREFER_after > 0))
+```
+
+```{r}
+ta %>% dplyr::select( n_apps_before, n_apps_after, CAR_CODIGO_1PREFER_after, CAR_CODIGO_2PREFER_after, CAR_CODIGO_3PREFER_after, CAR_CODIGO_4PREFER_after, CAR_CODIGO_5PREFER_after)
+```
+
+```{r}
+car21 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/carreras.csv", sep=';', header=TRUE)
+car21$CODU <- substr(car21$CODIGO, 1, 2)
+u_names <- car21 %>% distinct(UNIVERSIDAD, CODU)
+codus <- unique(car21$CODU)
+```
+
+```{r}
+for(codu in codus){
+  print(codu)
+  col1 <- paste("postulo_before_", codu, sep="")
+  col2 <- paste("postulaciones_before_", codu, sep="")
+  col3 <- paste("postulo_after_", codu, sep="")
+  col4 <- paste("postulaciones_after_", codu, sep="")  
+  codu <- as.numeric(codu)
+  ta %<>% mutate(aux2 = (as.numeric(substr(CAR_CODIGO_1PREFER_before, 1, 2)) == codu) + (as.numeric(substr(CAR_CODIGO_2PREFER_before, 1, 2)) == codu) + 
+                            (as.numeric(substr(CAR_CODIGO_3PREFER_before, 1, 2)) == codu) + (as.numeric(substr(CAR_CODIGO_4PREFER_before, 1, 2)) == codu) +
+                            (as.numeric(substr(CAR_CODIGO_5PREFER_before, 1, 2)) == codu) + (as.numeric(substr(CAR_CODIGO_6PREFER_before, 1, 2)) == codu) +
+                            (as.numeric(substr(CAR_CODIGO_7PREFER_before, 1, 2)) == codu) + (as.numeric(substr(CAR_CODIGO_8PREFER_before, 1, 2)) == codu) +
+                            (as.numeric(substr(CAR_CODIGO_9PREFER_before, 1, 2)) == codu) + (as.numeric(substr(CAR_CODIGO_10PREFER_before, 1, 2)) == codu), 
+                 aux4 = (as.numeric(substr(CAR_CODIGO_1PREFER_after, 1, 2)) == codu) + (as.numeric(substr(CAR_CODIGO_2PREFER_after, 1, 2)) == codu) + 
+                            (as.numeric(substr(CAR_CODIGO_3PREFER_after, 1, 2)) == codu) + (as.numeric(substr(CAR_CODIGO_4PREFER_after, 1, 2)) == codu) +
+                            (as.numeric(substr(CAR_CODIGO_5PREFER_after, 1, 2)) == codu) + (as.numeric(substr(CAR_CODIGO_6PREFER_after, 1, 2)) == codu) +
+                            (as.numeric(substr(CAR_CODIGO_7PREFER_after, 1, 2)) == codu) + (as.numeric(substr(CAR_CODIGO_8PREFER_after, 1, 2)) == codu) +
+                            (as.numeric(substr(CAR_CODIGO_9PREFER_after, 1, 2)) == codu) + (as.numeric(substr(CAR_CODIGO_10PREFER_after, 1, 2)) == codu))
+  ta %<>% mutate(aux1 = ifelse(aux2 > 0, 1, 0), aux3 = ifelse(aux4 > 0, 1, 0))
+  names(ta)[names(ta) == "aux1"] <- col1
+  names(ta)[names(ta) == "aux2"] <- col2
+  names(ta)[names(ta) == "aux3"] <- col3
+  names(ta)[names(ta) == "aux4"] <- col4
+}
+```
+
+```{r}
+ta <- merge(ta, probs[,c("MRUN", "prob_level_1", "prob_level_2", "prob_level_3", "prob_level_4", "prob_level_5", 
+                         "prob_level_6", "prob_level_7", "prob_level_8", "prob_level_9", "prob_level_10")], by.x="mrun", by.y="MRUN", all.x=TRUE)
+```
+
+```{r}
+ta %<>% mutate(removed_1 = ifelse(CAR_CODIGO_1PREFER_before == 0, 0, 
+                                  ifelse(CAR_CODIGO_1PREFER_before != CAR_CODIGO_1PREFER_after & CAR_CODIGO_1PREFER_before != CAR_CODIGO_2PREFER_after &
+                                           CAR_CODIGO_1PREFER_before != CAR_CODIGO_3PREFER_after & CAR_CODIGO_1PREFER_before != CAR_CODIGO_4PREFER_after & 
+                                           CAR_CODIGO_1PREFER_before != CAR_CODIGO_5PREFER_after & CAR_CODIGO_1PREFER_before != CAR_CODIGO_6PREFER_after & 
+                                           CAR_CODIGO_1PREFER_before != CAR_CODIGO_7PREFER_after & CAR_CODIGO_1PREFER_before != CAR_CODIGO_8PREFER_after & 
+                                           CAR_CODIGO_1PREFER_before != CAR_CODIGO_9PREFER_after & CAR_CODIGO_1PREFER_before != CAR_CODIGO_10PREFER_after, 1, 0)), 
+               removed_2 = ifelse(CAR_CODIGO_2PREFER_before == 0, 0, 
+                                  ifelse(CAR_CODIGO_2PREFER_before != CAR_CODIGO_1PREFER_after & CAR_CODIGO_2PREFER_before != CAR_CODIGO_2PREFER_after &
+                                           CAR_CODIGO_2PREFER_before != CAR_CODIGO_3PREFER_after & CAR_CODIGO_2PREFER_before != CAR_CODIGO_4PREFER_after & 
+                                           CAR_CODIGO_2PREFER_before != CAR_CODIGO_5PREFER_after & CAR_CODIGO_2PREFER_before != CAR_CODIGO_6PREFER_after & 
+                                           CAR_CODIGO_2PREFER_before != CAR_CODIGO_7PREFER_after & CAR_CODIGO_2PREFER_before != CAR_CODIGO_8PREFER_after & 
+                                           CAR_CODIGO_2PREFER_before != CAR_CODIGO_9PREFER_after & CAR_CODIGO_2PREFER_before != CAR_CODIGO_10PREFER_after, 1, 0)), 
+               removed_3 = ifelse(CAR_CODIGO_3PREFER_before == 0, 0, 
+                                  ifelse(CAR_CODIGO_3PREFER_before != CAR_CODIGO_1PREFER_after & CAR_CODIGO_3PREFER_before != CAR_CODIGO_2PREFER_after &
+                                           CAR_CODIGO_3PREFER_before != CAR_CODIGO_3PREFER_after & CAR_CODIGO_3PREFER_before != CAR_CODIGO_4PREFER_after & 
+                                           CAR_CODIGO_3PREFER_before != CAR_CODIGO_5PREFER_after & CAR_CODIGO_3PREFER_before != CAR_CODIGO_6PREFER_after & 
+                                           CAR_CODIGO_3PREFER_before != CAR_CODIGO_7PREFER_after & CAR_CODIGO_3PREFER_before != CAR_CODIGO_8PREFER_after & 
+                                           CAR_CODIGO_3PREFER_before != CAR_CODIGO_9PREFER_after & CAR_CODIGO_3PREFER_before != CAR_CODIGO_10PREFER_after, 1, 0)), 
+               removed_4 = ifelse(CAR_CODIGO_4PREFER_before == 0, 0, 
+                                  ifelse(CAR_CODIGO_4PREFER_before != CAR_CODIGO_1PREFER_after & CAR_CODIGO_4PREFER_before != CAR_CODIGO_2PREFER_after &
+                                           CAR_CODIGO_4PREFER_before != CAR_CODIGO_3PREFER_after & CAR_CODIGO_4PREFER_before != CAR_CODIGO_4PREFER_after & 
+                                           CAR_CODIGO_4PREFER_before != CAR_CODIGO_5PREFER_after & CAR_CODIGO_4PREFER_before != CAR_CODIGO_6PREFER_after & 
+                                           CAR_CODIGO_4PREFER_before != CAR_CODIGO_7PREFER_after & CAR_CODIGO_4PREFER_before != CAR_CODIGO_8PREFER_after & 
+                                           CAR_CODIGO_4PREFER_before != CAR_CODIGO_9PREFER_after & CAR_CODIGO_4PREFER_before != CAR_CODIGO_10PREFER_after, 1, 0)), 
+               removed_5 = ifelse(CAR_CODIGO_5PREFER_before == 0, 0, 
+                                  ifelse(CAR_CODIGO_5PREFER_before != CAR_CODIGO_1PREFER_after & CAR_CODIGO_5PREFER_before != CAR_CODIGO_2PREFER_after &
+                                           CAR_CODIGO_5PREFER_before != CAR_CODIGO_3PREFER_after & CAR_CODIGO_5PREFER_before != CAR_CODIGO_4PREFER_after & 
+                                           CAR_CODIGO_5PREFER_before != CAR_CODIGO_5PREFER_after & CAR_CODIGO_5PREFER_before != CAR_CODIGO_6PREFER_after & 
+                                           CAR_CODIGO_5PREFER_before != CAR_CODIGO_7PREFER_after & CAR_CODIGO_5PREFER_before != CAR_CODIGO_8PREFER_after & 
+                                           CAR_CODIGO_5PREFER_before != CAR_CODIGO_9PREFER_after & CAR_CODIGO_5PREFER_before != CAR_CODIGO_10PREFER_after, 1, 0)), 
+               removed_6 = ifelse(CAR_CODIGO_6PREFER_before == 0, 0, 
+                                  ifelse(CAR_CODIGO_6PREFER_before != CAR_CODIGO_1PREFER_after & CAR_CODIGO_6PREFER_before != CAR_CODIGO_2PREFER_after &
+                                           CAR_CODIGO_6PREFER_before != CAR_CODIGO_3PREFER_after & CAR_CODIGO_6PREFER_before != CAR_CODIGO_4PREFER_after & 
+                                           CAR_CODIGO_6PREFER_before != CAR_CODIGO_5PREFER_after & CAR_CODIGO_6PREFER_before != CAR_CODIGO_6PREFER_after & 
+                                           CAR_CODIGO_6PREFER_before != CAR_CODIGO_7PREFER_after & CAR_CODIGO_6PREFER_before != CAR_CODIGO_8PREFER_after & 
+                                           CAR_CODIGO_6PREFER_before != CAR_CODIGO_9PREFER_after & CAR_CODIGO_6PREFER_before != CAR_CODIGO_10PREFER_after, 1, 0)), 
+               removed_7 = ifelse(CAR_CODIGO_7PREFER_before == 0, 0, 
+                                  ifelse(CAR_CODIGO_7PREFER_before != CAR_CODIGO_1PREFER_after & CAR_CODIGO_7PREFER_before != CAR_CODIGO_2PREFER_after &
+                                           CAR_CODIGO_7PREFER_before != CAR_CODIGO_3PREFER_after & CAR_CODIGO_7PREFER_before != CAR_CODIGO_4PREFER_after & 
+                                           CAR_CODIGO_7PREFER_before != CAR_CODIGO_5PREFER_after & CAR_CODIGO_7PREFER_before != CAR_CODIGO_6PREFER_after & 
+                                           CAR_CODIGO_7PREFER_before != CAR_CODIGO_7PREFER_after & CAR_CODIGO_7PREFER_before != CAR_CODIGO_8PREFER_after & 
+                                           CAR_CODIGO_7PREFER_before != CAR_CODIGO_9PREFER_after & CAR_CODIGO_7PREFER_before != CAR_CODIGO_10PREFER_after, 1, 0)), 
+               removed_8 = ifelse(CAR_CODIGO_8PREFER_before == 0, 0, 
+                                  ifelse(CAR_CODIGO_8PREFER_before != CAR_CODIGO_1PREFER_after & CAR_CODIGO_8PREFER_before != CAR_CODIGO_2PREFER_after &
+                                           CAR_CODIGO_8PREFER_before != CAR_CODIGO_3PREFER_after & CAR_CODIGO_8PREFER_before != CAR_CODIGO_4PREFER_after & 
+                                           CAR_CODIGO_8PREFER_before != CAR_CODIGO_5PREFER_after & CAR_CODIGO_8PREFER_before != CAR_CODIGO_6PREFER_after & 
+                                           CAR_CODIGO_8PREFER_before != CAR_CODIGO_7PREFER_after & CAR_CODIGO_8PREFER_before != CAR_CODIGO_8PREFER_after & 
+                                           CAR_CODIGO_8PREFER_before != CAR_CODIGO_9PREFER_after & CAR_CODIGO_8PREFER_before != CAR_CODIGO_10PREFER_after, 1, 0)), 
+               removed_9 = ifelse(CAR_CODIGO_9PREFER_before == 0, 0, 
+                                  ifelse(CAR_CODIGO_9PREFER_before != CAR_CODIGO_1PREFER_after & CAR_CODIGO_9PREFER_before != CAR_CODIGO_2PREFER_after &
+                                           CAR_CODIGO_9PREFER_before != CAR_CODIGO_3PREFER_after & CAR_CODIGO_9PREFER_before != CAR_CODIGO_4PREFER_after & 
+                                           CAR_CODIGO_9PREFER_before != CAR_CODIGO_5PREFER_after & CAR_CODIGO_9PREFER_before != CAR_CODIGO_6PREFER_after & 
+                                           CAR_CODIGO_9PREFER_before != CAR_CODIGO_7PREFER_after & CAR_CODIGO_9PREFER_before != CAR_CODIGO_8PREFER_after & 
+                                           CAR_CODIGO_9PREFER_before != CAR_CODIGO_9PREFER_after & CAR_CODIGO_9PREFER_before != CAR_CODIGO_10PREFER_after, 1, 0)), 
+               removed_10 = ifelse(CAR_CODIGO_10PREFER_before == 0, 0, 
+                                  ifelse(CAR_CODIGO_10PREFER_before != CAR_CODIGO_1PREFER_after & CAR_CODIGO_10PREFER_before != CAR_CODIGO_2PREFER_after &
+                                           CAR_CODIGO_10PREFER_before != CAR_CODIGO_3PREFER_after & CAR_CODIGO_10PREFER_before != CAR_CODIGO_4PREFER_after & 
+                                           CAR_CODIGO_10PREFER_before != CAR_CODIGO_5PREFER_after & CAR_CODIGO_10PREFER_before != CAR_CODIGO_6PREFER_after & 
+                                           CAR_CODIGO_10PREFER_before != CAR_CODIGO_7PREFER_after & CAR_CODIGO_10PREFER_before != CAR_CODIGO_8PREFER_after & 
+                                           CAR_CODIGO_10PREFER_before != CAR_CODIGO_9PREFER_after & CAR_CODIGO_10PREFER_before != CAR_CODIGO_10PREFER_after, 1, 0)))
+```
+
+```{r}
+ta %<>% mutate(added_1 = ifelse(CAR_CODIGO_1PREFER_after == 0, 0, 
+                                  ifelse(CAR_CODIGO_1PREFER_after != CAR_CODIGO_1PREFER_before & CAR_CODIGO_1PREFER_after != CAR_CODIGO_2PREFER_before &
+                                           CAR_CODIGO_1PREFER_after != CAR_CODIGO_3PREFER_before & CAR_CODIGO_1PREFER_after != CAR_CODIGO_4PREFER_before & 
+                                           CAR_CODIGO_1PREFER_after != CAR_CODIGO_5PREFER_before & CAR_CODIGO_1PREFER_after != CAR_CODIGO_6PREFER_before & 
+                                           CAR_CODIGO_1PREFER_after != CAR_CODIGO_7PREFER_before & CAR_CODIGO_1PREFER_after != CAR_CODIGO_8PREFER_before & 
+                                           CAR_CODIGO_1PREFER_after != CAR_CODIGO_9PREFER_before & CAR_CODIGO_1PREFER_after != CAR_CODIGO_10PREFER_before, 1, 0)), 
+               added_2 = ifelse(CAR_CODIGO_2PREFER_after == 0, 0, 
+                                  ifelse(CAR_CODIGO_2PREFER_after != CAR_CODIGO_1PREFER_before & CAR_CODIGO_2PREFER_after != CAR_CODIGO_2PREFER_before &
+                                           CAR_CODIGO_2PREFER_after != CAR_CODIGO_3PREFER_before & CAR_CODIGO_2PREFER_after != CAR_CODIGO_4PREFER_before & 
+                                           CAR_CODIGO_2PREFER_after != CAR_CODIGO_5PREFER_before & CAR_CODIGO_2PREFER_after != CAR_CODIGO_6PREFER_before & 
+                                           CAR_CODIGO_2PREFER_after != CAR_CODIGO_7PREFER_before & CAR_CODIGO_2PREFER_after != CAR_CODIGO_8PREFER_before & 
+                                           CAR_CODIGO_2PREFER_after != CAR_CODIGO_9PREFER_before & CAR_CODIGO_2PREFER_after != CAR_CODIGO_10PREFER_before, 1, 0)), 
+               added_3 = ifelse(CAR_CODIGO_3PREFER_after == 0, 0, 
+                                  ifelse(CAR_CODIGO_3PREFER_after != CAR_CODIGO_1PREFER_before & CAR_CODIGO_3PREFER_after != CAR_CODIGO_2PREFER_before &
+                                           CAR_CODIGO_3PREFER_after != CAR_CODIGO_3PREFER_before & CAR_CODIGO_3PREFER_after != CAR_CODIGO_4PREFER_before & 
+                                           CAR_CODIGO_3PREFER_after != CAR_CODIGO_5PREFER_before & CAR_CODIGO_3PREFER_after != CAR_CODIGO_6PREFER_before & 
+                                           CAR_CODIGO_3PREFER_after != CAR_CODIGO_7PREFER_before & CAR_CODIGO_3PREFER_after != CAR_CODIGO_8PREFER_before & 
+                                           CAR_CODIGO_3PREFER_after != CAR_CODIGO_9PREFER_before & CAR_CODIGO_3PREFER_after != CAR_CODIGO_10PREFER_before, 1, 0)), 
+               added_4 = ifelse(CAR_CODIGO_4PREFER_after == 0, 0, 
+                                  ifelse(CAR_CODIGO_4PREFER_after != CAR_CODIGO_1PREFER_before & CAR_CODIGO_4PREFER_after != CAR_CODIGO_2PREFER_before &
+                                           CAR_CODIGO_4PREFER_after != CAR_CODIGO_3PREFER_before & CAR_CODIGO_4PREFER_after != CAR_CODIGO_4PREFER_before & 
+                                           CAR_CODIGO_4PREFER_after != CAR_CODIGO_5PREFER_before & CAR_CODIGO_4PREFER_after != CAR_CODIGO_6PREFER_before & 
+                                           CAR_CODIGO_4PREFER_after != CAR_CODIGO_7PREFER_before & CAR_CODIGO_4PREFER_after != CAR_CODIGO_8PREFER_before & 
+                                           CAR_CODIGO_4PREFER_after != CAR_CODIGO_9PREFER_before & CAR_CODIGO_4PREFER_after != CAR_CODIGO_10PREFER_before, 1, 0)), 
+               added_5 = ifelse(CAR_CODIGO_5PREFER_after == 0, 0, 
+                                  ifelse(CAR_CODIGO_5PREFER_after != CAR_CODIGO_1PREFER_before & CAR_CODIGO_5PREFER_after != CAR_CODIGO_2PREFER_before &
+                                           CAR_CODIGO_5PREFER_after != CAR_CODIGO_3PREFER_before & CAR_CODIGO_5PREFER_after != CAR_CODIGO_4PREFER_before & 
+                                           CAR_CODIGO_5PREFER_after != CAR_CODIGO_5PREFER_before & CAR_CODIGO_5PREFER_after != CAR_CODIGO_6PREFER_before & 
+                                           CAR_CODIGO_5PREFER_after != CAR_CODIGO_7PREFER_before & CAR_CODIGO_5PREFER_after != CAR_CODIGO_8PREFER_before & 
+                                           CAR_CODIGO_5PREFER_after != CAR_CODIGO_9PREFER_before & CAR_CODIGO_5PREFER_after != CAR_CODIGO_10PREFER_before, 1, 0)), 
+               added_6 = ifelse(CAR_CODIGO_6PREFER_after == 0, 0, 
+                                  ifelse(CAR_CODIGO_6PREFER_after != CAR_CODIGO_1PREFER_before & CAR_CODIGO_6PREFER_after != CAR_CODIGO_2PREFER_before &
+                                           CAR_CODIGO_6PREFER_after != CAR_CODIGO_3PREFER_before & CAR_CODIGO_6PREFER_after != CAR_CODIGO_4PREFER_before & 
+                                           CAR_CODIGO_6PREFER_after != CAR_CODIGO_5PREFER_before & CAR_CODIGO_6PREFER_after != CAR_CODIGO_6PREFER_before & 
+                                           CAR_CODIGO_6PREFER_after != CAR_CODIGO_7PREFER_before & CAR_CODIGO_6PREFER_after != CAR_CODIGO_8PREFER_before & 
+                                           CAR_CODIGO_6PREFER_after != CAR_CODIGO_9PREFER_before & CAR_CODIGO_6PREFER_after != CAR_CODIGO_10PREFER_before, 1, 0)), 
+               added_7 = ifelse(CAR_CODIGO_7PREFER_after == 0, 0, 
+                                  ifelse(CAR_CODIGO_7PREFER_after != CAR_CODIGO_1PREFER_before & CAR_CODIGO_7PREFER_after != CAR_CODIGO_2PREFER_before &
+                                           CAR_CODIGO_7PREFER_after != CAR_CODIGO_3PREFER_before & CAR_CODIGO_7PREFER_after != CAR_CODIGO_4PREFER_before & 
+                                           CAR_CODIGO_7PREFER_after != CAR_CODIGO_5PREFER_before & CAR_CODIGO_7PREFER_after != CAR_CODIGO_6PREFER_before & 
+                                           CAR_CODIGO_7PREFER_after != CAR_CODIGO_7PREFER_before & CAR_CODIGO_7PREFER_after != CAR_CODIGO_8PREFER_before & 
+                                           CAR_CODIGO_7PREFER_after != CAR_CODIGO_9PREFER_before & CAR_CODIGO_7PREFER_after != CAR_CODIGO_10PREFER_before, 1, 0)), 
+               added_8 = ifelse(CAR_CODIGO_8PREFER_after == 0, 0, 
+                                  ifelse(CAR_CODIGO_8PREFER_after != CAR_CODIGO_1PREFER_before & CAR_CODIGO_8PREFER_after != CAR_CODIGO_2PREFER_before &
+                                           CAR_CODIGO_8PREFER_after != CAR_CODIGO_3PREFER_before & CAR_CODIGO_8PREFER_after != CAR_CODIGO_4PREFER_before & 
+                                           CAR_CODIGO_8PREFER_after != CAR_CODIGO_5PREFER_before & CAR_CODIGO_8PREFER_after != CAR_CODIGO_6PREFER_before & 
+                                           CAR_CODIGO_8PREFER_after != CAR_CODIGO_7PREFER_before & CAR_CODIGO_8PREFER_after != CAR_CODIGO_8PREFER_before & 
+                                           CAR_CODIGO_8PREFER_after != CAR_CODIGO_9PREFER_before & CAR_CODIGO_8PREFER_after != CAR_CODIGO_10PREFER_before, 1, 0)), 
+               added_9 = ifelse(CAR_CODIGO_9PREFER_after == 0, 0, 
+                                  ifelse(CAR_CODIGO_9PREFER_after != CAR_CODIGO_1PREFER_before & CAR_CODIGO_9PREFER_after != CAR_CODIGO_2PREFER_before &
+                                           CAR_CODIGO_9PREFER_after != CAR_CODIGO_3PREFER_before & CAR_CODIGO_9PREFER_after != CAR_CODIGO_4PREFER_before & 
+                                           CAR_CODIGO_9PREFER_after != CAR_CODIGO_5PREFER_before & CAR_CODIGO_9PREFER_after != CAR_CODIGO_6PREFER_before & 
+                                           CAR_CODIGO_9PREFER_after != CAR_CODIGO_7PREFER_before & CAR_CODIGO_9PREFER_after != CAR_CODIGO_8PREFER_before & 
+                                           CAR_CODIGO_9PREFER_after != CAR_CODIGO_9PREFER_before & CAR_CODIGO_9PREFER_after != CAR_CODIGO_10PREFER_before, 1, 0)), 
+               added_10 = ifelse(CAR_CODIGO_10PREFER_after == 0, 0, 
+                                  ifelse(CAR_CODIGO_10PREFER_after != CAR_CODIGO_1PREFER_before & CAR_CODIGO_10PREFER_after != CAR_CODIGO_2PREFER_before &
+                                           CAR_CODIGO_10PREFER_after != CAR_CODIGO_3PREFER_before & CAR_CODIGO_10PREFER_after != CAR_CODIGO_4PREFER_before & 
+                                           CAR_CODIGO_10PREFER_after != CAR_CODIGO_5PREFER_before & CAR_CODIGO_10PREFER_after != CAR_CODIGO_6PREFER_before & 
+                                           CAR_CODIGO_10PREFER_after != CAR_CODIGO_7PREFER_before & CAR_CODIGO_10PREFER_after != CAR_CODIGO_8PREFER_before & 
+                                           CAR_CODIGO_10PREFER_after != CAR_CODIGO_9PREFER_before & CAR_CODIGO_10PREFER_after != CAR_CODIGO_10PREFER_before, 1, 0)))  
+```
+
+
+```{r}
+ta %<>% mutate(added = added_1 + added_2 + added_3 + added_4 + added_5 +
+                added_6 + added_7 + added_8 + added_9 + added_10)
+ta %<>% mutate(removed = removed_1 + removed_2 + removed_3 + removed_4 + removed_5 +
+                removed_6 + removed_7 + removed_8 + removed_9 + removed_10)
+ta %<>% mutate(removed_with_alert = prob_level_1*removed_1 + prob_level_2*removed_2 + prob_level_3*removed_3 + prob_level_4*removed_4 + prob_level_5*removed_5 +
+                prob_level_6*removed_6 + prob_level_7*removed_7 + prob_level_8*removed_8 + prob_level_9*removed_9 + prob_level_10*removed_10)
+ta %<>% mutate(removed_without_alert = (1-prob_level_1)*removed_1 + (1-prob_level_2)*removed_2 + (1-prob_level_3)*removed_3 + (1-prob_level_4)*removed_4 + (1-prob_level_5)*removed_5 +
+                (1-prob_level_6)*removed_6 + (1-prob_level_7)*removed_7 + (1-prob_level_8)*removed_8 + (1-prob_level_9)*removed_9 + (1-prob_level_10)*removed_10)
+```
+
+
+
+```{r}
+saveRDS(ta, "/Users/iriosu/Dropbox/Mistakes/Code/R/analysis warnings/Data/data_with_apps_treatment_and_probs_v2.rds")
+```
+
+# Update list of users who viewed the intervention
+```{r}
+Cartilla_OpenList <- read.csv('~/Dropbox/Mistakes/Code/R/analysis warnings/Data/Cartilla_OpenList_1415.csv', sep=',', header=FALSE)
+Cartilla_OpenList %<>% dplyr::rename(MRUN = V1, opening_cartilla_date = V2)
+ta %<>% mutate(view = ifelse(mrun %in% Cartilla_OpenList$MRUN, 1, 0))
+```
+
+## Add final assignment and counterfactual assignment
+
+```{r}
+reg_b <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2021/asignacion_obtenida_reg_before.csv", sep=";", header=TRUE)
+reg_a <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2021/asignacion_obtenida_reg.csv", sep=";", header=TRUE)
+bea_b <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2021/asignacion_obtenida_bea_before.csv", sep=";", header=TRUE)
+bea_a <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2021/asignacion_obtenida_bea.csv", sep=";", header=TRUE)
+```
+
+```{r}
+ar_b <- reg_b %>% filter(marca == 24)
+ab_b <- bea_b %>% filter(marca == 24)
+ar_a <- reg_a %>% filter(marca == 24)
+ab_a <- bea_a %>% filter(marca == 24)
+a_b <- rbind(ar_b, ab_b)
+a_a <- rbind(ar_a, ab_a)
+colnames(a_b) <- c("id_alumno", "codigo_carrera_assigned_before", "puntpond_assigned_before", "marca_before", "orden_before", "pref_assigned_before")
+colnames(a_a) <- c("id_alumno", "codigo_carrera_assigned_after", "puntpond_assigned_after", "marca_after", "orden_after", "pref_assigned_after")
+```
+
+```{r}
+ta <- merge(ta, a_b[,c("id_alumno", "codigo_carrera_assigned_before", "puntpond_assigned_before",  "pref_assigned_before")], by.x = "mrun", by.y="id_alumno", all.x=TRUE)
+ta <- merge(ta, a_a[,c("id_alumno", "codigo_carrera_assigned_after", "puntpond_assigned_after",  "pref_assigned_after")],  by.x = "mrun", by="id_alumno", all.x=TRUE)
+ta[is.na(ta)] <- 0
+```
+
+```{r}
+ta %<>% mutate(assigned_before = ifelse(codigo_carrera_assigned_before > 0, 1, 0), 
+               assigned_after = ifelse(codigo_carrera_assigned_after > 0, 1, 0) )
+ta %<>% mutate(change_assignment = assigned_after - assigned_before, 
+               change_pref_assignment = ifelse(assigned_before == assigned_after, pref_assigned_after - pref_assigned_before, 0), 
+               change_number_apps = n_apps_after - n_apps_before, 
+               change_application = ifelse(CAR_CODIGO_1PREFER_before != CAR_CODIGO_1PREFER_after | 
+                                             CAR_CODIGO_2PREFER_before != CAR_CODIGO_2PREFER_after |
+                                             CAR_CODIGO_3PREFER_before != CAR_CODIGO_3PREFER_after |
+                                             CAR_CODIGO_4PREFER_before != CAR_CODIGO_4PREFER_after |
+                                             CAR_CODIGO_5PREFER_before != CAR_CODIGO_5PREFER_after |
+                                             CAR_CODIGO_6PREFER_before != CAR_CODIGO_6PREFER_after |
+                                             CAR_CODIGO_7PREFER_before != CAR_CODIGO_7PREFER_after |
+                                             CAR_CODIGO_8PREFER_before != CAR_CODIGO_8PREFER_after |
+                                             CAR_CODIGO_9PREFER_before != CAR_CODIGO_9PREFER_after |
+                                             CAR_CODIGO_10PREFER_before != CAR_CODIGO_10PREFER_after, 1, 0), 
+               change_overall_prob = overall_prob_after - overall_prob_before,
+               removed_any = ifelse(removed > 0, 1, 0), 
+               added_any = ifelse(added > 0, 1, 0))
+```
+
+Strata_1 es Macro area of most preferred major
+Strata_2 es General Message
+Strata_3 es Grupos de puntaje
+Strata_4 es Private School or not
+
+```{r}
+stratas <- appFinal_before_after %>% dplyr::select("MRUN", "Strata_1", "Strata_2", "Strata_3", "Strata_4") %>% dplyr::rename(major_area = Strata_1, general_message = Strata_2, score_group = Strata_3, private_school = Strata_4)
+```
+
+```{r}
+ta <- merge(ta, stratas, by.x="mrun", by.y="MRUN")
+```
+
+```{r}
+ta %<>% mutate(general_message_label = ifelse(general_message == 0, "Explore", ifelse(general_message == 1, "Safety", ifelse(general_message == 2, "Both", "Reach"))),
+               Treatment_label = ifelse(Treatment == 0, "All", ifelse(Treatment == 1, "Warnings", "Recommendation")))
+```
+
+```{r}
+ta %<>% mutate(Treatment_0 = ifelse(Treatment == 0, 1, 0), 
+               Treatment_1 = ifelse(Treatment == 1, 1, 0), 
+               Treatment_2 = ifelse(Treatment == 2, 1, 0))
+```
+
+```{r}
+saveRDS(ta, "/Users/iriosu/Dropbox/Mistakes/Code/R/analysis warnings/Data/data_with_apps_treatment_and_probs_v3.rds")
+```
+
+
+# Tables included in report
+```{r}
+ta <- readRDS("/Users/iriosu/Dropbox/Mistakes/Code/R/analysis warnings/Data/data_with_apps_treatment_and_probs_v3.rds")
+```
+
+## General
+```{r}
+ta %>% group_by(Treatment) %>% summarise(n=n(), views = sum(view), ba = sum(applied_before == 1 & applied_after == 1), inc = sum(n_apps_after > n_apps_before), dec = sum(n_apps_after < n_apps_before))
+```
+
+## Apertura
+```{r}
+ta %>% group_by(Treatment, view) %>% summarise(n=n(), ba = sum(applied_before == 1 & applied_after == 1)/n(), inc = sum(n_apps_after > n_apps_before)/n(), dec = sum(n_apps_after < n_apps_before)/n())
+```
+
+# Modificaro postulacion
+```{r}
+ta %>% filter(applied_before == 1 & applied_after == 1) %>% group_by(Treatment) %>% summarise(n=n(), lab = mean(n_apps_before), laa = mean(n_apps_after), pb = mean(overall_prob_before), pa = mean(overall_prob_after))
+```
+
+## Por universidad
+```{r}
+car21 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/carreras.csv", sep=';', header=TRUE)
+car21$CODU <- substr(car21$CODIGO, 1, 2)
+u_names <- car21 %>% distinct(UNIVERSIDAD, CODU)
+codus <- unique(car21$CODU)
+```
+
+```{r}
+out <- data.frame(name=numeric(0), postulo_before= numeric(0), postulaciones_before=numeric(0), postulo_after= numeric(0), postulaciones_after=numeric(0))
+for(codu in codus){
+  col1 <- paste("postulo_before_", codu, sep="")
+  col2 <- paste("postulaciones_before_", codu, sep="")
+  col3 <- paste("postulo_after_", codu, sep="")
+  col4 <- paste("postulaciones_after_", codu, sep="")
+  
+  aux <- ta %>% subset(applied_before == 1 & applied_after == 1)
+  nm <- as.character(u_names[u_names$CODU == codu, "UNIVERSIDAD"])
+  
+  out[nrow(out)+1, ] <- c(nm, sum(aux[,col1]), sum(aux[,col2]), sum(aux[,col3]), sum(aux[,col4]))
+}
+write.csv(out, "/Users/iriosu/Dropbox/Mistakes/Code/R/analysis warnings/Outputs/before_and_after_per_university.csv", row.names = FALSE)
+```
+
+## Postulan antes y despues
+#### Totales
+```{r}
+ta %>% filter(applied_before == 1 & applied_after == 1) %>% group_by(Treatment) %>% summarise(n=n(), nab = mean(n_apps_before), naa = mean(n_apps_after), prob_before = mean(overall_prob_before), prob_after = mean(overall_prob_after))
+```
+
+#### Promedios
+```{r}
+ta %>% filter(applied_before == 1 & applied_after == 1) %>% group_by(Treatment) %>% summarise(n=n(), nab = mean(n_apps_before), naa = mean(n_apps_after), prob_before = mean(overall_prob_before), prob_after = mean(overall_prob_after))
+```
+#### Desviaciones estandar
+```{r}
+ta %>% filter(applied_before == 1 & applied_after == 1) %>% group_by(Treatment) %>% summarise(n=n(), nab = sd(n_apps_before), naa = sd(n_apps_after), prob_before = sd(overall_prob_before), prob_after = sd(overall_prob_after))
+```
+
+## Foco en alumnos con alerta roja
+#### Promedio
+```{r}
+ta %>% filter(applied_before == 1 & applied_after == 1) %>% group_by(Treatment, any_low_prob_before) %>% summarise(n = n(), nab = mean(n_apps_before),  naa = mean(n_apps_after), pa = mean(overall_prob_before), pb = mean(overall_prob_after), nalb = mean(num_alerts_before), nala = mean(num_alerts_after))
+```
+
+#### Desviacion estandar
+```{r}
+ta %>% filter(applied_before == 1 & applied_after == 1) %>% group_by(Treatment, any_low_prob_before) %>% summarise(n = n(), nab = sd(n_apps_before),  naa = sd(n_apps_after), pa = sd(overall_prob_before), pb = sd(overall_prob_after), nalb = sd(num_alerts_before), nala = sd(num_alerts_after))
+```
+
+## Elimina preferencia por warning
+
+```{r}
+ta %>% filter(applied_before == 1 & applied_after == 1) %>% group_by(Treatment, any_low_prob_before) %>% summarise(n = n(), a = mean(added), r = mean(removed), rwa = mean(removed_with_alert), rwoa = mean(removed_without_alert))
+```
+
+```{r}
+ta %>% filter(applied_before == 1 & applied_after == 1) %>% group_by(Treatment, any_low_prob_before) %>% summarise(n = n(), a = sd(added), r = sd(removed), rwa = sd(removed_with_alert), rwoa = sd(removed_without_alert))
+```
+
+
+## Efecto UBO
+
+```{r}
+dat %<>% mutate(napps_ubo_before = (as.numeric(substr(CAR_CODIGO_1PREFER_before, 1, 2)) == 53) + (as.numeric(substr(CAR_CODIGO_2PREFER_before, 1, 2)) == 53) + 
+                            (as.numeric(substr(CAR_CODIGO_3PREFER_before, 1, 2)) == 53) + (as.numeric(substr(CAR_CODIGO_4PREFER_before, 1, 2)) == 53) +
+                            (as.numeric(substr(CAR_CODIGO_5PREFER_before, 1, 2)) == 53) + (as.numeric(substr(CAR_CODIGO_6PREFER_before, 1, 2)) == 53) +
+                            (as.numeric(substr(CAR_CODIGO_7PREFER_before, 1, 2)) == 53) + (as.numeric(substr(CAR_CODIGO_8PREFER_before, 1, 2)) == 53) +
+                            (as.numeric(substr(CAR_CODIGO_9PREFER_before, 1, 2)) == 53) + (as.numeric(substr(CAR_CODIGO_10PREFER_before, 1, 2)) == 53), 
+            napps_ubo_after = (as.numeric(substr(CAR_CODIGO_1PREFER_after, 1, 2)) == 53) + (as.numeric(substr(CAR_CODIGO_2PREFER_after, 1, 2)) == 53) + 
+                            (as.numeric(substr(CAR_CODIGO_3PREFER_after, 1, 2)) == 53) + (as.numeric(substr(CAR_CODIGO_4PREFER_after, 1, 2)) == 53) +
+                            (as.numeric(substr(CAR_CODIGO_5PREFER_after, 1, 2)) == 53) + (as.numeric(substr(CAR_CODIGO_6PREFER_after, 1, 2)) == 53) +
+                            (as.numeric(substr(CAR_CODIGO_7PREFER_after, 1, 2)) == 53) + (as.numeric(substr(CAR_CODIGO_8PREFER_after, 1, 2)) == 53) +
+                            (as.numeric(substr(CAR_CODIGO_9PREFER_after, 1, 2)) == 53) + (as.numeric(substr(CAR_CODIGO_10PREFER_after, 1, 2)) == 53))
+```
+
+
+```{r}
+dat %>% group_by(Treatment <= 2) %>% summarise(n=n(), nab = mean(napps_ubo_before), nab.s = sd(napps_ubo_before), naa = mean(napps_ubo_after), naa.s = sd(napps_ubo_after))
+```
+
+
+```{r}
+dat %>% group_by(Treatment <= 2 & napps_ubo_before > 0) %>% summarise(n=n(), nab = mean(napps_ubo_before), nab.s = sd(napps_ubo_before), naa = mean(napps_ubo_after), naa.s = sd(napps_ubo_after))
+```
+
+```{r}
+wilcox.test(ubo$napps_ubo_before, ubo$napps_ubo_after, paired=TRUE) 
+```
+
+
+
+```{r}
+dat %>% filter(Treatment <= 2 & napps_ubo_before > 0) %>% summarise(n_less = sum(napps_ubo_after < napps_ubo_before), n_more = sum(napps_ubo_after  > napps_ubo_before), n_same = sum(napps_ubo_after == napps_ubo_before))
+```
+
+
+# Summary Statistics
+
+```{r}
+ta$change_assignment
+```
+
+
+```{r}
+table_treatment_strata_stats = ta %>% 
+  subset(view == 1) %>% 
+  arrange(Treatment) %>%
+  group_by(general_message_label, Treatment_label) %>% 
+  summarise(Total = length(applied_after),
+            #Abrio = sum(abrio_cartilla),
+            Modifico = round(100*mean(applied_after),2),
+            Aumento_postulacion = round(100*mean(change_number_apps > 0),2),
+            Disminuyo_postulacion = round(100*mean(change_number_apps < 0),2),
+            Largo_promedio = round(mean(change_number_apps),2),
+            Asignados = round(100*mean(change_assignment),2),
+            Asignago_change = round(100*mean(change_assignment),2)) 
+# See table
+stargazer(table_treatment_strata_stats, summary = FALSE, type = "text") 
+```
+
+
+
+# Regression Analysis
+
+```{r}
+colnames(ta)
+```
+
+
+```{r}
+lm_app <- lm(data = ta, subset=(view == 1 & general_message > 0), formula = change_application ~ (Treatment_0 + Treatment_1) * factor(any_low_prob_before) )
+lm_napps <- lm(data = ta, subset=(view == 1 & general_message > 0), formula = change_number_apps ~ (Treatment_0 + Treatment_1) * factor(any_low_prob_before) )
+lm_adm <- lm(data = ta, subset=(view == 1 & general_message > 0), formula = change_assignment ~ (Treatment_0 + Treatment_1) * factor(any_low_prob_before) )
+lm_prob <- lm(data = ta, subset=(view == 1 & general_message > 0), formula = change_overall_prob ~ (Treatment_0 + Treatment_1) * factor(any_low_prob_before) )
+lm_added <- lm(data = ta, subset=(view == 1 & general_message > 0), formula = added_any ~ (Treatment_0 + Treatment_1) * factor(any_low_prob_before) )
+lm_removed <- lm(data = ta, subset=(view == 1 & general_message > 0), formula = removed_any ~ (Treatment_0 + Treatment_1) * factor(any_low_prob_before) )
+
+stargazer(coeftest(lm_app, vcov = vcovHC(lm_app, type="HC1")), 
+          coeftest(lm_napps, vcov = vcovHC(lm_napps, type="HC1")), 
+          coeftest(lm_adm, vcov = vcovHC(lm_adm, type="HC1")), 
+          coeftest(lm_prob, vcov = vcovHC(lm_adm, type="HC1")), 
+          coeftest(lm_added, vcov = vcovHC(lm_added, type="HC1")), 
+          coeftest(lm_removed, vcov = vcovHC(lm_removed, type="HC1")))
+```
+
+
+
+```{r}
+summary(lm(data = ta, subset=(general_message > 0 & any_low_prob_before == 1), formula = removed_with_alert ~ view + Treatment_0 + Treatment_1))
+```
+
+
+```{r}
+ta %>% filter(view == 1) %>% group_by(Treatment) %>% tally()
+```
+
+```{r}
+appFinal_before_after %>% subset(abrio_cartilla == 1) %>% group_by(Treatment) %>% summarise(n_distinct(MRUN))
+```
+
+
+
+
+
+
+
+
+```{r}
+colnames(ta)
+```
+
