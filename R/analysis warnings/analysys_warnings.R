@@ -21,6 +21,7 @@ library(anytime)
 RNGkind("L'Ecuyer-CMRG")
 set.seed(1)
 
+# Testing github and Rstudio
 
 # Paths -------------------------------------------------------------------
 
