@@ -1,0 +1,431 @@
+---
+title: "Analysis"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+---
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(rddtools)
+library(parallel)
+library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+```
+
+```{r}
+dropbox_dir = "~/Dropbox/"
+```
+
+
+# Load data and Pre-processing
+The data I'm loading here is in long format (one row per student/application), and it includes all students who applied to at least one program (even if they have only invalid applications)
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+dfs_2019 <- readRDS(paste(dropbox_dir, "Mistakes/Data/intermediate_data/bcd_and_survey_2019.rds", sep=''))
+
+car19 <- read.csv(file = paste(dropbox_dir, "/Dropout_matching/Intermediate_data/data-giorgio/oferta2019_201812021829.csv", sep = "") , header=TRUE, sep=';')
+
+cols_w = c("ID", "LENG_ACTUAL", "LENG_ANTERIOR", "MATE_ACTUAL", "MATE_ANTERIOR", "CIEN_ACTUAL", "CIEN_ANTERIOR", "HCSO_ACTUAL","HCSO_ANTERIOR", "PTJE_RANKING", "PTJE_NEM", "assigned_2019", "PROMEDIO_LM_ACTUAL", "PROMEDIO_LM_ANTERIOR")
+cols_l <- c('COD_CARRERA_PREF_01', 'ESTADO_PREF_01','PTJE_PREF_01', 'LUGAR_PREF_01', 'POND_ACAD_PREF_01',
+          'COD_CARRERA_PREF_02', 'ESTADO_PREF_02','PTJE_PREF_02', 'LUGAR_PREF_02', 'POND_ACAD_PREF_02',
+          'COD_CARRERA_PREF_03', 'ESTADO_PREF_03','PTJE_PREF_03', 'LUGAR_PREF_03', 'POND_ACAD_PREF_03',
+          'COD_CARRERA_PREF_04', 'ESTADO_PREF_04','PTJE_PREF_04', 'LUGAR_PREF_04', 'POND_ACAD_PREF_04',
+          'COD_CARRERA_PREF_05', 'ESTADO_PREF_05','PTJE_PREF_05', 'LUGAR_PREF_05', 'POND_ACAD_PREF_05',
+          'COD_CARRERA_PREF_06', 'ESTADO_PREF_06','PTJE_PREF_06', 'LUGAR_PREF_06', 'POND_ACAD_PREF_06',
+          'COD_CARRERA_PREF_07', 'ESTADO_PREF_07','PTJE_PREF_07', 'LUGAR_PREF_07', 'POND_ACAD_PREF_07',
+          'COD_CARRERA_PREF_08', 'ESTADO_PREF_08','PTJE_PREF_08', 'LUGAR_PREF_08', 'POND_ACAD_PREF_08',
+          'COD_CARRERA_PREF_09', 'ESTADO_PREF_09','PTJE_PREF_09', 'LUGAR_PREF_09', 'POND_ACAD_PREF_09',
+          'COD_CARRERA_PREF_10', 'ESTADO_PREF_10','PTJE_PREF_10', 'LUGAR_PREF_10', 'POND_ACAD_PREF_10')
+
+d_2019_l <- reshape(dfs_2019[,c(cols_w, cols_l)], direction='long', 
+                    varying=colnames(dfs_2019[,cols_l]), 
+                    times=c('01', '02', '03', '04', '05', '06', '07', '08', '09', '10'),
+                    v.names=c('COD_CARRERA_PREF', 'ESTADO_PREF','PTJE_PREF', 'LUGAR_PREF', 'POND_ACAD_PREF'),
+                    idvar='ID')
+colnames(d_2019_l) <- c(cols_w, "pref", "codigo_carrera", "marca", "orden", "puntano", "puntpond") # this is just me not knowing how to use reshape
+
+rdat <- merge(d_2019_l, car19, by.x="codigo_carrera", by.y="CODIGO")
+
+rdat %<>% mutate(psu_actual = LENG_ACTUAL*PCT_LENG + MATE_ACTUAL*PCT_MATE + 
+                                      ifelse(ifelse(!is.na(CIEN_ACTUAL) & !is.na(PCT_CIEN), CIEN_ACTUAL*PCT_CIEN, 0) > ifelse(!is.na(HCSO_ACTUAL) & !is.na(PCT_HCSO), HCSO_ACTUAL*PCT_HCSO, 0), ifelse(!is.na(CIEN_ACTUAL) & !is.na(PCT_CIEN), CIEN_ACTUAL*PCT_CIEN, 0), ifelse(!is.na(HCSO_ACTUAL) & !is.na(PCT_HCSO), HCSO_ACTUAL*PCT_HCSO, 0)), 
+                psu_anterior = LENG_ANTERIOR*PCT_LENG + MATE_ANTERIOR*PCT_MATE + 
+                                      ifelse(ifelse(!is.na(CIEN_ANTERIOR) & !is.na(PCT_CIEN), CIEN_ANTERIOR*PCT_CIEN, 0) > ifelse(!is.na(HCSO_ANTERIOR) & !is.na(PCT_HCSO), HCSO_ANTERIOR*PCT_HCSO, 0), ifelse(!is.na(CIEN_ANTERIOR) & !is.na(PCT_CIEN), CIEN_ANTERIOR*PCT_CIEN, 0), ifelse(!is.na(HCSO_ANTERIOR) & !is.na(PCT_HCSO), HCSO_ANTERIOR*PCT_HCSO, 0)))
+
+rdat %<>% mutate(anterior_best = ifelse(!is.na(psu_anterior), ifelse(psu_anterior > psu_actual, 1, 0), 0))
+
+rdat %<>%  mutate(pp = ifelse(PTJE_NEM == 0, 
+                                  ifelse(anterior_best == 0, psu_actual/(100-PCT_NOTAS-PCT_RANKING),
+                                         psu_anterior/(100-PCT_NOTAS-PCT_RANKING)),
+                                        (PTJE_RANKING*PCT_RANKING + PTJE_NEM*PCT_NOTAS)/100 + ifelse(anterior_best == 0,
+                                                                                                     psu_actual/(100),
+                                                                                                     psu_anterior/(100))),
+                  plm = ifelse(anterior_best == 0, 0.5*(LENG_ACTUAL + MATE_ACTUAL) , 0.5*(LENG_ANTERIOR + MATE_ANTERIOR)))
+
+rdat %<>% group_by(ID) %>% mutate(num_apps = n(), num_apps_invalid = sum(marca < 24 | marca > 26), 
+                                  is_valid = ifelse(marca >= 24 & marca <= 26, 1, 0), 
+                                  num_apps_w_min_pp_geq_600 = sum(PTJE_PONDERADO_MINIMO >= 600))
+
+rdat %<>% mutate(all_mistakes = ifelse(num_apps_invalid == num_apps, 1, 0), 
+                 some_mistakes = ifelse(num_apps_invalid > 0 & num_apps_invalid < num_apps, 1, 0),
+                 distance_to_min_lm = round(plm-PROM_MIN_LENG_MATE,0), 
+                 distance_to_min_pond = round(pp-PTJE_PONDERADO_MINIMO,0),
+                 distance_to_min_lm_1 = round((plm-PROM_MIN_LENG_MATE)/0.5)*0.5, 
+                 distance_to_min_pond_1 = round((pp-PTJE_PONDERADO_MINIMO)/0.5)*0.5)
+```
+
+
+```{r}
+pref_assigned <- rdat %>% filter(marca == 24) %>% dplyr::select(ID, codigo_carrera, pref)
+
+colnames(pref_assigned) <- c("ID", "carrera_assigned", "pref_assigned")
+pref_assigned$pref_assigned <- as.numeric(pref_assigned$pref_assigned)
+
+rdat <- merge(rdat, pref_assigned, by="ID", all.x=TRUE)
+rdat$carrera_assigned[is.na(rdat$carrera_assigned)] <- 0
+rdat$pref_assigned[is.na(rdat$pref_assigned)] <- 0
+
+rm(pref_assigned)
+```
+
+```{r}
+rdat %<>% mutate(marca_rel = ifelse(pref_assigned < as.numeric(pref) & pref_assigned > 0, 26, marca))
+```
+
+```{r}
+rdat <- merge(rdat, dfs_2019[,c("ID", "PACE")], by="ID", all.x=TRUE)
+```
+
+
+
+# Plots
+
+## Programs
+```{r}
+colnames(car19)
+```
+
+```{r}
+aux <- rbind( car19 %>% dplyr::select(CODIGO, PROM_MIN_LENG_MATE) %>% mutate(val = "Min. Avg. Math/Verbal") %>% dplyr::rename(score=PROM_MIN_LENG_MATE),
+              car19 %>% dplyr::select(CODIGO, PTJE_PONDERADO_MINIMO) %>% mutate(val = "Min. Weighted. Score") %>% dplyr::rename(score=PTJE_PONDERADO_MINIMO) )
+```
+
+
+
+```{r}
+ggplot(aux, aes(score, colour=val)) + stat_ecdf(geom = "step", pad = TRUE) +
+  labs(x = "Score", y="Cumulative Density") +
+  # scale_fill_discrete(name = "Dose", labels = c("[0,450]", "(450,500]", "(500,550]", "(600,650]", "(650,700]", "(700,850]")) +
+  scale_y_continuous(expand = c(0, 0), limits = c(-0.01,1.01)) + 
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+        legend.title = element_blank(), legend.position="bottom")
+ggsave("plots/cdf_min_scores.pdf")
+```
+
+
+
+## Students
+```{r}
+ggplot(rdat %>% filter(all_mistakes == 1), aes(x=pp)) + 
+  geom_histogram(position = "identity", alpha=0.5) +
+  scale_y_continuous(expand = c(0, 0)) + 
+  labs(x = "Score", y="Count") +
+  # scale_fill_discrete(name = "Dose", labels = c("[0,450]", "(450,500]", "(500,550]", "(600,650]", "(650,700]", "(700,850]")) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+        legend.title = element_blank())
+
+ggplot(rdat %>% filter(all_mistakes == 1), aes(x=plm)) + 
+  geom_histogram(position = "identity", alpha=0.5) +
+  scale_y_continuous(expand = c(0, 0)) + 
+  geom_vline(xintercept = 450, linetype="dashed", 
+                color = "black", size=0.5) +
+  labs(x = "Score", y="Count") +
+  # scale_fill_discrete(name = "Dose", labels = c("[0,450]", "(450,500]", "(500,550]", "(600,650]", "(650,700]", "(700,850]")) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+        legend.title = element_blank())
+```
+
+
+
+```{r}
+ggplot(rdat %>% filter(all_mistakes == 1 & is.na(PACE)) ) +
+  geom_histogram(aes(x=pp), fill="blue", alpha=0.5, binwidth=10) + 
+  geom_histogram(aes(x=plm),position = "identity", fill="red", alpha=0.5, binwidth=10) +
+  scale_y_continuous(expand = c(0, 0)) + 
+  geom_vline(xintercept = 450, linetype="dashed", 
+                color = "black", size=0.5) +
+  xlim(200, 700) +
+  labs(x = "Score", y="Count") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+        legend.title = element_blank())
+# ggsave("plots/distribution_scores_all_mistakes_no_pace.pdf")
+```
+
+
+
+
+```{r}
+rdat %>% filter(all_mistakes == 1 & is.na(PACE)) %>% group_by(plm >= 450) %>% summarise(n_distinct(ID))
+```
+
+
+```{r}
+ggplot(rdat %>% filter(all_mistakes == 1), aes(x=pp)) + 
+  geom_histogram(position = "identity", alpha=0.5) +
+  scale_y_continuous(expand = c(0, 0)) + 
+  labs(x = "Score", y="Count") +
+  # scale_fill_discrete(name = "Dose", labels = c("[0,450]", "(450,500]", "(500,550]", "(600,650]", "(650,700]", "(700,850]")) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+        legend.title = element_blank())
+```
+
+```{r fig.width=8, fig.height=4}
+dfs_2019 %>% group_by(number_apps) %>% summarise(prob_some_mistake = mean(some_mistake)) %>%
+  ggplot(aes(x=number_apps, y=prob_some_mistake)) +
+  geom_bar(stat="identity", width=0.5) +
+  scale_y_continuous(expand = c(0, 0)) + 
+  scale_x_continuous(breaks = round(seq(1,10, by = 1),1)) +
+  labs(x = "Number of Applications", y="Prob. of Some Mistake") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+        text = element_text(size=15))
+```
+
+```{r fig.width=8, fig.height=4}
+dfs_2019 %>% group_by(number_apps) %>% summarise(prob_all_mistake = mean(all_mistakes)) %>%
+  ggplot(aes(x=number_apps, y=prob_all_mistake)) +
+  geom_bar(stat="identity", width=0.5) +
+  scale_y_continuous(expand = c(0, 0)) + 
+  scale_x_continuous(breaks = round(seq(1,10, by = 1),1)) +
+  labs(x = "Number of Applications", y="Prob. of All Mistake") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+        text = element_text(size=15))
+```
+
+```{r fig.width=8, fig.height=4}
+dfs_2019 %>% group_by(number_apps) %>% summarise(prob_assigned = mean(assigned_2019)) %>%
+  ggplot(aes(x=number_apps, y=prob_assigned)) +
+  geom_bar(stat="identity", width=0.5) +
+  scale_y_continuous(expand = c(0, 0)) + 
+  scale_x_continuous(breaks = round(seq(1,10, by = 1),1)) +
+  labs(x = "Number of Applications", y="Prob. Assigned") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+        text = element_text(size=15))
+```
+
+```{r fig.width=8, fig.height=4}
+d_2019_l %>% filter(codigo_carrera > 0) %>% group_by(pref) %>% summarise(prob_error = mean(!marca %in% c(24,25,26))) %>%
+  ggplot(aes(x=pref, y=prob_error)) +
+  geom_bar(stat="identity", width=0.5) +
+  scale_y_continuous(expand = c(0, 0)) + 
+  # scale_x_continuous(breaks = round(seq(1,10, by = 1),1)) +
+  labs(x = "Preference", y="Prob. of Mistake") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+        text = element_text(size=15))
+```
+
+```{r}
+ggplot(rdat %>% filter(!is.na(codigo_carrera) & (marca_rel < 24 | marca_rel > 26)) , aes(x=pp, y=plm)) + 
+  geom_point(alpha=0.25) +
+  scale_y_continuous(expand = c(0, 0)) + 
+  labs(x = "Weighted Score", y="Avg. Math-Verbal") +
+  geom_hline(yintercept = 450, linetype="dashed", color = "red", size=0.5) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(),
+        text = element_text(size=15))
+ggsave("plots/pp_vs_plm.pdf")
+```
+
+
+
+
+# Summary statistics
+
+```{r}
+dfs_2019 %>% filter(number_apps > 0) %>% summarise(n = n(), some_mistake = sum(number_apps > valid_apps), all_mistakes = sum(valid_apps == 0))
+```
+
+```{r}
+dfs_2019 %>% filter(applied_2019 == 1) %>% group_by(some_mistake) %>% summarise(n=n(), prob_assigned = mean(assigned_2019), prob_female = mean(is_female))
+```
+
+Naturally students that have an average score <= 450 will make mistake sand will not be assigned. However, these differences still hold for students above 450.
+
+```{r}
+dfs_2019 %>% filter(applied_2019 == 1 & (PROMEDIO_LM_ACTUAL >= 450 | PROMEDIO_LM_ANTERIOR >= 450)) %>% group_by(some_mistake) %>% summarise(n=n(), prob_assigned = mean(assigned_2019), prob_female = mean(is_female), mean_lm = mean(PROMEDIO_LM_ACTUAL),  mean_sd = sd(PROMEDIO_LM_ACTUAL))
+```
+
+Still, there may be significant differences between students that make some mistakes and those that do not. In order to make this comparison better, we can look at programs that require a minimum application score. Students around the cutoff are very similar, so an RDD approach can give us an idea of the effect.
+
+```{r}
+rdat %>% filter(marca < 24 | marca > 26) %>% group_by(marca) %>% tally() %>% mutate(pct = n/135577) %>% arrange(-n)
+```
+
+```{r}
+car19 %>% summarise(n=n(), lm_500 = sum(PROM_MIN_LENG_MATE <= 500))
+car19 %>% summarise(n=n(), lm_500 = sum(PTJE_PONDERADO_MINIMO <= 100))
+car19 %>% summarise(n=n(), lm_500 = sum(PTJE_PONDERADO_MINIMO < 490))
+car19 %>% summarise(n=n(), lm_500 = sum(PTJE_PONDERADO_MINIMO <= 500))
+```
+
+
+# RDD analysis
+
+
+```{r}
+dfg <- rdat %>% filter(!is.na(codigo_carrera) & abs(distance_to_min_pond) <= 10) %>% group_by(distance_to_min_pond) %>% summarise(prob_assigned = mean(assigned_2019))
+
+rde <- rdd_data(dfg$prob_assigned, dfg$distance_to_min_pond, cutpoint = 0)
+rdd_assigned <- rdd_reg_lm(rdd_object = rde, slope = "same", order=2)
+summary(rdd_assigned)
+
+plot(rdd_assigned,
+     cex = 0.75, 
+     col = "steelblue", 
+     xlab = "Distance to cutoff", 
+     ylab = "Probability of Assignment")
+```
+
+
+
+```{r}
+dfg <- rdat %>% filter(!is.na(codigo_carrera) & abs(distance_to_min_pond) <= 10 & plm >= 500) %>% group_by(distance_to_min_pond) %>% summarise(prob_assigned = mean(assigned_2019))
+
+rde <- rdd_data(dfg$prob_assigned, dfg$distance_to_min_pond, cutpoint = 0)
+rdd_assigned <- rdd_reg_lm(rdd_object = rde, slope = "same", order=2)
+summary(rdd_assigned)
+
+plot(rdd_assigned,
+     cex = 0.75, 
+     col = "steelblue", 
+     xlab = "Distance to cutoff", 
+     ylab = "Probability of Assignment")
+```
+
+```{r}
+dfg <- rdat %>% filter(!is.na(codigo_carrera) & abs(distance_to_min_pond) <= 10 & plm >= 500 & num_apps > 1) %>% group_by(distance_to_min_pond) %>% summarise(prob_assigned = mean(assigned_2019))
+
+rde <- rdd_data(dfg$prob_assigned, dfg$distance_to_min_pond, cutpoint = 0)
+rdd_assigned <- rdd_reg_lm(rdd_object = rde, slope = "same", order=2)
+summary(rdd_assigned)
+
+plot(rdd_assigned,
+     cex = 0.75, 
+     col = "steelblue", 
+     xlab = "Distance to cutoff", 
+     ylab = "Probability of Assignment")
+```
+
+
+
+```{r}
+dfg <- rdat %>% filter(!is.na(codigo_carrera) & abs(distance_to_min_pond) <= 10 & plm >= 500 & pp >= 490) %>% group_by(distance_to_min_pond) %>% summarise(prob_assigned = mean(assigned_2019))
+
+rde <- rdd_data(dfg$prob_assigned, dfg$distance_to_min_pond, cutpoint = 0)
+rdd_assigned <- rdd_reg_lm(rdd_object = rde, slope = "same", order=2)
+summary(rdd_assigned)
+
+plot(rdd_assigned,
+     cex = 0.75, 
+     col = "steelblue", 
+     xlab = "Distance to cutoff", 
+     ylab = "Probability of Assignment")
+```
+
+```{r}
+dfg <- rdat %>% filter(!is.na(codigo_carrera) & abs(distance_to_min_pond) <= 10 & plm >= 500 & pp >= 490 & num_apps > 1) %>% group_by(distance_to_min_pond) %>% summarise(prob_assigned = mean(assigned_2019))
+
+rde <- rdd_data(dfg$prob_assigned, dfg$distance_to_min_pond, cutpoint = 0)
+rdd_assigned <- rdd_reg_lm(rdd_object = rde, slope = "same", order=2)
+summary(rdd_assigned)
+
+plot(rdd_assigned,
+     cex = 0.75, 
+     col = "steelblue", 
+     xlab = "Distance to cutoff", 
+     ylab = "Probability of Assignment")
+```
+
+```{r}
+dfg <- rdat %>% filter(!is.na(codigo_carrera) & abs(distance_to_min_pond) <= 10 & plm >= 500 & pp >= 500 ) %>% group_by(distance_to_min_pond) %>% summarise(prob_assigned = mean(assigned_2019))
+
+rde <- rdd_data(dfg$prob_assigned, dfg$distance_to_min_pond, cutpoint = 0)
+rdd_assigned <- rdd_reg_lm(rdd_object = rde, slope = "same", order=2)
+summary(rdd_assigned)
+
+plot(rdd_assigned,
+     cex = 0.75, 
+     col = "steelblue", 
+     xlab = "Distance to cutoff", 
+     ylab = "Probability of Assignment")
+```
+
+
+
+```{r}
+rdat %>% filter(!is.na(codigo_carrera) & abs(distance_to_min_pond) <= 10 & plm >= 500 & num_apps > 1 & is_valid == 0 & pp >= 490) %>% group_by(pp < 500, marca) %>% tally() %>% arrange(-n)
+```
+
+
+# Reasons for mistakes
+
+```{r}
+survey_2020 <- read.csv(paste(dropbox_dir, "Mistakes in college admissions/data/clean/survey-responses-2020.csv", sep=''), header=TRUE)
+```
+
+```{r}
+survey_2020 %>% filter(n_errs > 0) %>% group_by(know_error) %>% tally()
+survey_2020 %>% filter(n_apps == n_errs) %>% group_by(know_error) %>% tally()
+survey_2020 %>% filter(know_error == "Si") %>% group_by(reason_error_yes) %>% tally()
+survey_2020 %>% filter(know_error == "No") %>% group_by(reason_error_no_3) %>% tally()
+survey_2020 %>% filter(know_error == "Si") %>% group_by(reason_error_yes, n_apps == n_errs) %>% tally()
+survey_2020 %>% filter(know_error == "No") %>% group_by(n_apps == n_errs, reason_error_no_2) %>% tally()
+```
+
+```{r}
+6085/9465
+```
+
+
+
+
+
+```{r}
+colnames(survey_2020)
+```
+
