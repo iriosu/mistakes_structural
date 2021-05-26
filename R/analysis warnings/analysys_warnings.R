@@ -25,9 +25,9 @@ set.seed(1)
 
 # Paths -------------------------------------------------------------------
 
-path_draft_tables = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/documents/draft/tables/"
-path_draft_plots = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/documents/draft/plots/"
-path_intermediate_data = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/intermediate_data/"
+path_draft_tables = "~/Dropbox/Mistakes Structural/Code/R/analysis warnings/Outputs/Tables/"
+path_draft_plots = "~/Dropbox/Mistakes Structural/Code/R/analysis warnings/Outputs/Plots/"
+path_intermediate_data = "~/Dropbox/Mistakes Structural/Data/intermediate_data/"
 
 # Load data ---------------------------------------------------------------
 
@@ -35,36 +35,36 @@ path_intermediate_data = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_
 #TODO: short description of these files
 #TODO: ask Chris to place his Matlab scripts in the repo
 # We think this is the list of all students who can participate in the Admission Process
-appList <- read.csv('~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/AppList.csv', sep=',', header=TRUE)
+appList <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/AppList.csv', sep=',', header=TRUE)
 #TODO: what is exactly Treatment 3?
 table(appList$Treatment)
 sum(duplicated(appList$mrun))
 # TODO: add description of file
-appRCT <- read.csv('~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/appRCT.csv', sep=',', header=TRUE)
+appRCT <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/appRCT.csv', sep=',', header=TRUE)
 # NOTE: we do not have T3 anymore in this file 
 table(appRCT$Treatment)
 sum(duplicated(appRCT$mrun))
 
 #TODO: Check with Chris if this file is OK
 # We need to see if this is most updated version of the file from Analytics and that the date he used to filter is correct
-Cartilla_OpenList <- read.csv('~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/Cartilla_OpenList_1415.csv', sep=',', header=FALSE)
-appFinal <- read.csv('~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/210217 Reporte Postulaciones MRUN v2 CB.csv', sep=',', header=TRUE)
-UBO_ErrorList <- read.csv('~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/UBO_ErrorList.csv', sep=',', header=FALSE)
-asignacion_obtenida_reg <- read.csv('~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/asignacion_obtenida_reg.csv', sep=';', header=TRUE)
-asignacion_obtenida_reg_before <- read.csv('~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/asignacion_obtenida_reg_before.csv', sep=';', header=TRUE)
-asignacion_obtenida_bea <- read.csv('~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/asignacion_obtenida_bea.csv', sep=';', header=TRUE)
-asignacion_obtenida_bea_before <- read.csv('~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/asignacion_obtenida_bea_before.csv', sep=';', header=TRUE)
-bcu <- read.csv('~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/ACCESO_BCU-8184.ETAPA2.csv', sep=';', header=TRUE)
+Cartilla_OpenList <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/Cartilla_OpenList_1415.csv', sep=',', header=FALSE)
+appFinal <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/210217 Reporte Postulaciones MRUN v2 CB.csv', sep=',', header=TRUE)
+UBO_ErrorList <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/UBO_ErrorList.csv', sep=',', header=FALSE)
+asignacion_obtenida_reg <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_reg.csv', sep=';', header=TRUE)
+asignacion_obtenida_reg_before <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_reg_before.csv', sep=';', header=TRUE)
+asignacion_obtenida_bea <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_bea.csv', sep=';', header=TRUE)
+asignacion_obtenida_bea_before <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_bea_before.csv', sep=';', header=TRUE)
+bcu <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/ACCESO_BCU-8184.ETAPA2.csv', sep=';', header=TRUE)
 
 #Save as Rdata
-save(appList, file = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/AppList.Rdata")
-save(appFinal, file = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/appFinal.Rdata")
-save(appRCT,file = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/appRCT.Rdata")
-save(Cartilla_OpenList,file = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/Cartilla_OpenList_1415.Rdata")
-save(asignacion_obtenida_reg,file = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/asignacion_obtenida_reg.Rdata")
-save(asignacion_obtenida_reg_before,file = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/asignacion_obtenida_reg_before.Rdata")
-save(asignacion_obtenida_bea_before,file = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/asignacion_obtenida_bea_before.Rdata")
-save(bcu,file = "~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/ACCESO_BCU-8184.ETAPA2.Rdata")
+save(appList, file = "~/Dropbox/Mistakes Structural/Data/2021/AppList.Rdata")
+save(appFinal, file = "~/Dropbox/Mistakes Structural/Data/2021/appFinal.Rdata")
+save(appRCT,file = "~/Dropbox/Mistakes Structural/Data/2021/appRCT.Rdata")
+save(Cartilla_OpenList,file = "~/Dropbox/Mistakes Structural/Data/2021/Cartilla_OpenList_1415.Rdata")
+save(asignacion_obtenida_reg,file = "~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_reg.Rdata")
+save(asignacion_obtenida_reg_before,file = "~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_reg_before.Rdata")
+save(asignacion_obtenida_bea_before,file = "~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_bea_before.Rdata")
+save(bcu,file = "~/Dropbox/Mistakes Structural/Data/2021/ACCESO_BCU-8184.ETAPA2.Rdata")
 
 # Before after vars -------------------------------------------------------
 
@@ -221,7 +221,7 @@ bcu_earnings %<>% mutate(mid_wage = ifelse(is.na(Wage_higher),
                                            (as.numeric(Wage_higher) + as.numeric(Wage_lower))/2))
 hist(bcu_earnings$mid_wage)
 # Use our computed cutoffs
-df_cutoffs = readRDS("~/Dropbox/Mistakes_in_college_admissions/data/interim/panel_cutoffs_2004_2020_20210420.rds")
+df_cutoffs = readRDS("~/Dropbox/Mistakes Structural/Data/older/panel_cutoffs_2004_2020_20210420.rds")
 # Merge with bcu
 bcu = merge(bcu, df_cutoffs %>% select(codigo_carrera, cutoff_2020), 
             by.x = "CODIGO_DEMRE", by.y = "codigo_carrera", all.x = TRUE)  
