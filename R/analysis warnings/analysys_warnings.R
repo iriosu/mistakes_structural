@@ -49,12 +49,16 @@ sum(duplicated(appRCT$mrun))
 # We need to see if this is most updated version of the file from Analytics and that the date he used to filter is correct
 Cartilla_OpenList <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/Cartilla_OpenList_1415.csv', sep=',', header=FALSE)
 appFinal <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/210217 Reporte Postulaciones MRUN v2 CB.csv', sep=',', header=TRUE)
+#appFinal <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/210217 Reporte Postulaciones MRUN v2 CB.csv', sep=',', header=TRUE, fileEncoding = "UTF-8-BOM")
 UBO_ErrorList <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/UBO_ErrorList.csv', sep=',', header=FALSE)
 asignacion_obtenida_reg <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_reg.csv', sep=';', header=TRUE)
 asignacion_obtenida_reg_before <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_reg_before.csv', sep=';', header=TRUE)
 asignacion_obtenida_bea <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_bea.csv', sep=';', header=TRUE)
 asignacion_obtenida_bea_before <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_bea_before.csv', sep=';', header=TRUE)
 bcu <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/ACCESO_BCU-8184.ETAPA2.csv', sep=';', header=TRUE)
+#bcu <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/ACCESO_BCU-8184.ETAPA2.csv', sep=';', header=TRUE, fileEncoding = "UTF-8-BOM")
+
+
 
 #Save as Rdata
 save(appList, file = "~/Dropbox/Mistakes Structural/Data/2021/AppList.Rdata")
@@ -650,6 +654,16 @@ mruns_propensity_score %<>% mutate(propensity_score_sample = 1)
 appFinal_before_after = merge(appFinal_before_after, mruns_propensity_score, by.x = "MRUN", by.y = "mrun", all.x = TRUE)
 appFinal_before_after %<>% mutate(propensity_score_sample = ifelse(is.na(propensity_score_sample), 0, propensity_score_sample))
 table(appFinal_before_after$propensity_score_sample)
+
+
+#Propensity score second specification (Anaïs):
+mruns_propensity_score_anais = readRDS(file = "~/Dropbox/Mistakes Structural/Data/2021/matched_sampled_using_propensity_score_view_email_anais.rds")
+mruns_propensity_score_anais %<>% select(mrun)
+mruns_propensity_score_anais %<>% mutate(propensity_score_sample_anais = 1)
+# Merge with all the sample for the anlysis
+appFinal_before_after = merge(appFinal_before_after, mruns_propensity_score_anais, by.x = "MRUN", by.y = "mrun", all.x = TRUE)
+appFinal_before_after %<>% mutate(propensity_score_sample_anais = ifelse(is.na(propensity_score_sample_anais), 0, propensity_score_sample_anais))
+table(appFinal_before_after$propensity_score_sample_anais)
 
 # Stats for students with an admissibility mistake by treatment group
 table_treatment_stats_adm_mistakes = appFinal_before_after %>% 
@@ -1352,33 +1366,121 @@ hist(app_UBO_before_after$n_apps_ubo_change)
 
 #load("~/Dropbox/Mistakes Structural/Data/intermediate_data/appFinal_before_after.rds")
 
-#Generate some variables used for analysis: difference between cutoffs, wages and length of initial vs final ROL:
+#Create some new variables related to the programs added/removed from the initial ROL:
+
+    #Number of new programs introduced in the final ROL:
+appFinal_before_after$nber_progr_added = apply(appFinal_before_after, MARGIN = 1, FUN = function(x){
+  
+  cars_before_set = c()
+  cars_after_set = c()
+  for(k in c("1","2","3","4","5","6","7","8","9","10")){
+    cars_before_set = c(cars_before_set,x[paste("CAR_CODIGO_",k,"PREFER.x", sep = "")])
+    cars_after_set = c(cars_after_set,x[paste("CAR_CODIGO_",k,"PREFER.y", sep = "")])
+  }
+  if(x["changed_app_after"] == 0){
+    cars_after_set = cars_before_set
+  } 
+  
+  cars_new = setdiff(as.numeric(cars_after_set), as.numeric(cars_before_set))
+  
+  # Filter NAs and -1
+  cars_new = cars_new[!is.na(cars_new)]
+  cars_new = cars_new[cars_new != -1]
+  
+  #Nber of new programs:
+  cars_new_length = length(cars_new)
+  return(cars_new_length)
+})
+
+
+    #Number of new programs removed from the initial ROL:
+appFinal_before_after$nber_progr_removed = apply(appFinal_before_after, MARGIN = 1, FUN = function(x){
+  cars_before_set = c()
+  cars_after_set = c()
+  for(k in c("1","2","3","4","5","6","7","8","9","10")){
+    cars_before_set = c(cars_before_set,x[paste("CAR_CODIGO_",k,"PREFER.x", sep = "")])
+    cars_after_set = c(cars_after_set,x[paste("CAR_CODIGO_",k,"PREFER.y", sep = "")])
+  }
+  if(x["changed_app_after"] == 0){
+    cars_after_set = cars_before_set
+  } 
+  cars_removed = setdiff(as.numeric(cars_before_set), as.numeric(cars_after_set))
+  # Filter NAs and -1
+  cars_removed = cars_removed[!is.na(cars_removed)]
+  cars_removed = cars_removed[cars_removed != -1]
+  
+  #Nber of removed programs:
+  cars_removed_length = length(cars_removed)
+  return(cars_removed_length)
+})
+
+
+    #Share of valid programs among programs added to the final ROL:
+appFinal_before_after$share_valid_added_progr = apply(appFinal_before_after, MARGIN = 1, FUN = function(x){
+  
+  cars_before_set = c()
+  cars_after_set = c()
+  for(k in c("1","2","3","4","5","6","7","8","9","10")){
+    cars_before_set = c(cars_before_set,x[paste("CAR_CODIGO_",k,"PREFER.x", sep = "")])
+    cars_after_set = c(cars_after_set,x[paste("CAR_CODIGO_",k,"PREFER.y", sep = "")])
+  }
+  if(x["changed_app_after"] == 0){
+    cars_after_set = cars_before_set
+  } 
+  cars_new = setdiff(as.numeric(cars_after_set), as.numeric(cars_before_set))
+  # Filter NAs and -1
+  cars_new = cars_new[!is.na(cars_new)]
+  cars_new = cars_new[cars_new != -1]
+  #Nber of new programs:
+  cars_new_length = length(cars_new)
+  
+  
+  #Validity of new programs
+  
+  cars_after_score = c()
+  for(j in cars_new){
+    for(k in c("1","2","3","4","5","6","7","8","9","10")){
+      cars_after_score = c(cars_after_score,ifelse(x[paste("CAR_CODIGO_",k,"PREFER.y", sep = "")]==j, x[paste("PUNTAJE_CARR",k,".y", sep = "")], NA))
+    }
+  } 
+  
+  # Filter NAs
+  cars_after_score = cars_after_score[!is.na(cars_after_score)]
+  
+  #Share of valid added programs
+  invalid_programs_after = sum(as.numeric(cars_after_score) != -1)
+  share_valid_added_progr = ifelse(cars_new_length!=0, invalid_programs_after/cars_new_length, NA)
+  return(share_valid_added_progr)
+})
+
+
+
+    #Generate some variables used for analysis: difference between cutoffs, wages and length of initial vs final ROL:
 appFinal_before_after %<>% mutate(change_mean_cutoff = mean_cutoff_after - mean_cutoff_before)
 appFinal_before_after %<>% mutate(change_mean_wage = mean_wage_after - mean_wage_before)
-appFinal_before_after %<>% mutate(nber_app_added = app_length_after - app_length_before)
 
-#Generate bundled treatment group variables, grouping T0 and T1, T0 and T2 and T0, T1 and T2:
+    #Generate bundled treatment group variables, grouping T0 and T1, T0 and T2 and T0, T1 and T2:
 appFinal_before_after %<>% mutate(Treatment_01 = ifelse(Treatment_0==1 | Treatment_1==1, 1 ,0))
 appFinal_before_after %<>% mutate(Treatment_02 = ifelse(Treatment_0==1 | Treatment_2==1, 1 ,0))
 appFinal_before_after %<>% mutate(Treatment_012 = ifelse(Treatment_0==1 | Treatment_1==1 | Treatment_2==1, 1 ,0))
 
 
-#Load the file containing students' test scores:
+    #Load the file containing students' test scores:
 score <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/adm2021_archivo_C_demre_2021feb08_MRUN_Compartir.csv', sep=";", header=TRUE)
-sum(duplicated(score$mrun))                                     #Check duplicates
-score %<>% rename(MRUN = mrun)                                  #Rename student ID
+sum(duplicated(score$mrun))                                            #Check duplicates
+score %<>% dplyr::rename(MRUN = mrun)                                  #Rename student ID
 
-#Merge this dataset to appFinal_before_after:
+    #Merge this dataset to appFinal_before_after:
 appFinal_before_after = merge(appFinal_before_after,
                               score %>% select(MRUN, promedio_cm_actual,  promedio_lm_anterior, pace, percentil_cm_actual, percentil_lm_anterior, clec_actual, mate_actual, cien_actual, hcso_actual),
                               by = "MRUN", all.x = TRUE)
 
-#Make score numeric
+    #Make score numeric
 appFinal_before_after %<>% mutate(promedio_cm_actual = as.numeric(gsub(",", ".", promedio_cm_actual)))
 appFinal_before_after %<>% mutate(promedio_lm_anterior = as.numeric(gsub(",", ".", promedio_lm_anterior)))
 
 
-#Replace weigthed scores with those of initial ROL if the student did not modify it:
+    #Replace weigthed scores with those of initial ROL if the student did not modify it:
 appFinal_before_after %<>% mutate(PUNTAJE_CARR1.y = ifelse(changed_app_after==0,PUNTAJE_CARR1.x, PUNTAJE_CARR1.y ) ) 
 appFinal_before_after %<>% mutate(PUNTAJE_CARR2.y = ifelse(changed_app_after==0,PUNTAJE_CARR2.x, PUNTAJE_CARR2.y ) ) 
 appFinal_before_after %<>% mutate(PUNTAJE_CARR3.y = ifelse(changed_app_after==0,PUNTAJE_CARR3.x, PUNTAJE_CARR3.y ) ) 
@@ -1391,7 +1493,7 @@ appFinal_before_after %<>% mutate(PUNTAJE_CARR9.y = ifelse(changed_app_after==0,
 appFinal_before_after %<>% mutate(PUNTAJE_CARR10.y = ifelse(changed_app_after==0,PUNTAJE_CARR10.x, PUNTAJE_CARR10.y ) ) 
 
 
-#Replace missing weighted scores (NA) with zeros:
+    #Replace missing weighted scores (NA) with zeros:
 appFinal_before_after[is.na(appFinal_before_after$PUNTAJE_CARR1.y), "PUNTAJE_CARR1.y"] = 0
 appFinal_before_after[is.na(appFinal_before_after$PUNTAJE_CARR2.y), "PUNTAJE_CARR2.y"] = 0
 appFinal_before_after[is.na(appFinal_before_after$PUNTAJE_CARR3.y), "PUNTAJE_CARR3.y"] = 0
@@ -1404,24 +1506,24 @@ appFinal_before_after[is.na(appFinal_before_after$PUNTAJE_CARR9.y), "PUNTAJE_CAR
 appFinal_before_after[is.na(appFinal_before_after$PUNTAJE_CARR10.y), "PUNTAJE_CARR10.y"] = 0
 
 
-#Create a dummy variable equal to one if the student submitted at least one invalid application in his final ROL:
-appFinal_before_after %<>% mutate(error_after = ifelse((PUNTAJE_CARR1.y == -1 |
-                                                          PUNTAJE_CARR2.y == -1 |
-                                                          PUNTAJE_CARR3.y == -1 |
-                                                          PUNTAJE_CARR4.y == -1 |
-                                                          PUNTAJE_CARR5.y == -1 |
-                                                          PUNTAJE_CARR6.y == -1 |
-                                                          PUNTAJE_CARR7.y == -1 |
-                                                          PUNTAJE_CARR8.y == -1 |
-                                                          PUNTAJE_CARR9.y == -1 |
-                                                          PUNTAJE_CARR10.y == -1), 1, 0))
+    #Create a dummy variable equal to one if the student submitted at least one invalid application in his final ROL:
+appFinal_before_after %<>% mutate(error_after = ifelse(((PUNTAJE_CARR1.y == -1) |
+                                                          (PUNTAJE_CARR2.y == -1) |
+                                                          (PUNTAJE_CARR3.y == -1) |
+                                                          (PUNTAJE_CARR4.y == -1) |
+                                                          (PUNTAJE_CARR5.y == -1) |
+                                                          (PUNTAJE_CARR6.y == -1) |
+                                                          (PUNTAJE_CARR7.y == -1) |
+                                                          (PUNTAJE_CARR8.y == -1) |
+                                                          (PUNTAJE_CARR9.y == -1) |
+                                                          (PUNTAJE_CARR10.y == -1)), 1, 0))
 
 table(appFinal_before_after$error_before)
 table(appFinal_before_after[appFinal_before_after$error_before==1,]$error_after)   
 table(appFinal_before_after[appFinal_before_after$changed_app_after==1 & appFinal_before_after$error_before==1,]$error_after)   
 
 
-##########BALANCE TESTS##########
+############################################################BALANCE TESTS############################################################
 
 #Balance Tests T3 vs others:
 balance1 <- lm(data = appFinal_before_after, formula = promedio_cm_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
@@ -1576,14 +1678,14 @@ stargazer(balance1_T3_test3, balance2_T3_test3, balance3_T3_test3, balance4_T3_t
 
 
 
-##########ITT ANALYSIS##########
+############################################################ITT ANALYSIS############################################################
 
-#Pure ITT: T2 vs T1 and T0
+#######Pure ITT: T2 vs T1 and T0#######
 ITT_1 = lm(data = appFinal_before_after %>% subset(Treatment_3 != 1), formula = changed_app_after ~ Treatment_0 + Treatment_1)
 summary(ITT_1)
 ITT_2 = lm(data = appFinal_before_after %>% subset(Treatment_3 != 1), formula = app_length_change ~ Treatment_0 + Treatment_1)
 summary(ITT_2)
-ITT_3 = lm(data = appFinal_before_after %>% subset(Treatment_3 != 1), formula = nber_app_added ~ Treatment_0 + Treatment_1)
+ITT_3 = lm(data = appFinal_before_after %>% subset(Treatment_3 != 1), formula = nber_progr_added ~ Treatment_0 + Treatment_1)
 summary(ITT_3)
 ITT_4 = lm(data = appFinal_before_after %>% subset(Treatment_3 != 1), formula = change_mean_cutoff ~ Treatment_0 + Treatment_1)
 summary(ITT_4)
@@ -1602,12 +1704,12 @@ stargazer(ITT_1, ITT_2, ITT_4, ITT_5, ITT_6, ITT_7, ITT_8 , title="Intention-to-
           omit.stat=c("LL","ser","f"), single.row=FALSE)
 
 
-#Pure ITT restricted to students with at least one application mistake ex-ante: Sub-Group 2 of T3 vs T2 and T1 and T0
+#######Pure ITT restricted to students with at least one application mistake ex-ante: Sub-Group 2 of T3 vs T2 and T1 and T0#######
 ITT_1_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = changed_app_after ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(ITT_1_error)
 ITT_2_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = app_length_change ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(ITT_2_error)
-ITT_3_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = nber_app_added ~ Treatment_0 + Treatment_1 + Treatment_2)
+ITT_3_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = nber_progr_added ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(ITT_3_error)
 ITT_4_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = change_mean_cutoff ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(ITT_4_error)
@@ -1627,7 +1729,160 @@ stargazer(ITT_1_error, ITT_2_error, ITT_4_error, ITT_5_error, ITT_6_error, ITT_7
 
 
 
-##########WITHIN-TREATMENT ANALYSIS##########
+#######Pure ITT restricted to students with at least one application mistake ex-ante: Sub-Group 2 of T3 vs T2 and T1 and T0 - Validity of Programs Added#######
+
+      #Create some additional variables:
+          #Dummy for whether the student introduced or removed a program in the final ROL compared to the initial one:
+appFinal_before_after %<>% mutate(added_progr = ifelse(nber_progr_added>0,1,0))
+appFinal_before_after %<>% mutate(removed_progr = ifelse(nber_progr_removed>0,1,0))
+
+          #Dummy=1 if the student reduced/increased the number of invalid programs ranked in his final ROL compared to the initial one
+appFinal_before_after %<>% mutate(invalid_programs_removed_dummy = ifelse(invalid_programs_change<0,1,0))
+appFinal_before_after %<>% mutate(more_invalid = ifelse(invalid_programs_change>0,1,0))
+
+          #Dummy=1 if the student reduced/increased the share of invalid program in his final ROL compared to the initial one
+appFinal_before_after %<>% mutate(invalid_programs_share_reduced_dummy = ifelse(invalid_programs_share_change<0,1,0))
+appFinal_before_after %<>% mutate(invalid_programs_share_increase_dummy = ifelse(invalid_programs_share_change>0,1,0))
+
+
+      #Regressions:
+ITT_9_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = nber_progr_added ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_9_error)
+ITT_10_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = nber_progr_removed ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_10_error)
+ITT_11_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = error_after ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_11_error)
+ITT_12_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = invalid_programs_removed_dummy ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_12_error)
+ITT_13_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = more_invalid ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_13_error)
+ITT_14_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = invalid_programs_share_reduced_dummy ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_14_error)
+ITT_15_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = invalid_programs_share_increase_dummy ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_15_error)
+ITT_16_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = invalid_programs_change ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_16_error)
+ITT_17_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = invalid_programs_share_change ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_17_error)
+ITT_18_error = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = share_valid_added_progr ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_18_error)
+
+
+stargazer(ITT_11_error, ITT_12_error, ITT_13_error, ITT_14_error, ITT_18_error , title="Intention-to-Treat - Mistakes Only",
+          dep.var.labels=c("Mistake Ex-Post", "Reduced # Mistake", "Increase # Mistake", "Reduced Share Mistake", "Share Valid Programs among Added Programs"),
+          covariate.labels=c("T0", "T1", "T2"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
+#######Pure ITT - Change in Risk#######
+
+    #Load Initial Risk Database
+risk_initial <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/bootstrap_interim_admission_probabilities/applications_and_probs_last.csv', sep=';', header=TRUE)
+risk_initial %<>% select(MRUN, overall_prob)
+risk_initial %<>% dplyr::rename(overall_prob_initial=overall_prob)
+
+    #Load Final Risk Database
+risk_final <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/bootstrap_final_admission_probabilities/applications_and_probs_last.csv', sep=';', header=TRUE)
+risk_final %<>% select(MRUN, overall_prob)
+risk_final %<>% dplyr::rename(overall_prob_final=overall_prob)
+
+    #Merge both datasets
+risk = merge(risk_final, risk_initial, by="MRUN", all.x = TRUE)
+remove(risk_initial, risk_final)
+
+    #Merge to main dataset
+appFinal_before_after = merge(appFinal_before_after, risk, by="MRUN", all.x=TRUE)  
+
+    #Compute the risk and the change in risk
+appFinal_before_after %<>% mutate(risk_initial = 1-overall_prob_initial)
+appFinal_before_after %<>% mutate(risk_final = 1-overall_prob_final)
+appFinal_before_after %<>% mutate(change_risk = risk_final-risk_initial)
+appFinal_before_after %<>% mutate(reduced_risk = ifelse(change_risk<0, 1, 0))
+appFinal_before_after %<>% mutate(increased_risk = ifelse(change_risk>0, 1, 0))
+
+
+    #Regressions: T0 & T1 vs T2
+ITT_1_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 ) &  risk_initial!=0), formula = change_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_1_risk)
+ITT_2_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  risk_initial<=0.01), formula = change_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_2_risk)
+ITT_3_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  (risk_initial>0.01 & risk_initial<=0.30)), formula = change_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_3_risk)
+ITT_4_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  (risk_initial>0.30 & risk_initial<=0.70)), formula = change_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_4_risk)
+ITT_5_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  risk_initial>0.7), formula = change_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_5_risk)
+ITT_6_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  risk_initial==1), formula = change_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_6_risk)
+
+
+ITT_1_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  risk_initial!=0), formula = reduced_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_1_reducedrisk)
+ITT_2_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  risk_initial<=0.01), formula = reduced_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_2_reducedrisk)
+ITT_3_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  (risk_initial>0.01 & risk_initial<=0.30)), formula = reduced_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_3_reducedrisk)
+ITT_4_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  (risk_initial>0.30 & risk_initial<=0.70)), formula = reduced_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_4_reducedrisk)
+ITT_5_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  risk_initial>0.7), formula = reduced_risk ~ Treatment_0 + Treatment_1 )
+summary(ITT_5_reducedrisk)
+ITT_6_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  risk_initial==1), formula = reduced_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_6_reducedrisk)
+
+
+ITT_1_increasedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  risk_initial<=0.01), formula = increased_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_1_increasedrisk)
+ITT_2_increasedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1) &  (risk_initial>0.01 & risk_initial<=0.30)), formula = increased_risk ~ Treatment_0 + Treatment_1)
+summary(ITT_2_increasedrisk)
+
+
+stargazer(ITT_1_risk, ITT_2_risk, ITT_3_risk, ITT_4_risk, ITT_5_risk, ITT_6_risk, ITT_1_reducedrisk, title="Intention-to-Treat - Risk",
+          dep.var.labels=c("Change Risk", "Reduced Risk"),
+          covariate.labels=c("T0", "T1"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
+
+
+      #Regressions for students with at least one application mistake ex-ante: Sub-Group 2 of T3 vs T2 and T1 and T0
+
+ITT_1_error_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & risk_initial!=0), formula = change_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_1_error_risk)
+ITT_2_error_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & risk_initial<=0.01), formula = change_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_2_error_risk)
+ITT_3_error_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & (risk_initial>0.01 & risk_initial<=0.30)), formula = change_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_3_error_risk)
+ITT_4_error_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & (risk_initial>0.30 & risk_initial<=0.70)), formula = change_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_4_error_risk)
+ITT_5_error_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & risk_initial>0.7), formula = change_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_5_error_risk)
+ITT_6_error_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & risk_initial==1), formula = change_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_6_error_risk)
+
+
+ITT_1_error_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & risk_initial!=0), formula = reduced_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_1_error_reducedrisk)
+ITT_2_error_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & risk_initial<=0.01), formula = reduced_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_2_error_reducedrisk)
+ITT_3_error_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & (risk_initial>0.01 & risk_initial<=0.30)), formula = reduced_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_3_error_reducedrisk)
+ITT_4_error_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & (risk_initial>0.30 & risk_initial<=0.70)), formula = reduced_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_4_error_reducedrisk)
+ITT_5_error_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & risk_initial>0.7), formula = reduced_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_5_error_reducedrisk)
+ITT_6_error_reducedrisk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1 & risk_initial==1), formula = reduced_risk ~ Treatment_0 + Treatment_1 + Treatment_2)
+summary(ITT_6_error_reducedrisk)
+
+
+
+stargazer(ITT_1_error_risk, ITT_2_error_risk, ITT_3_error_risk, ITT_4_error_risk, ITT_5_error_risk, ITT_6_error_risk, ITT_1_error_reducedrisk, title="Intention-to-Treat - Risk - Mistakes Only",
+          dep.var.labels=c("Change Risk", "Reduced Risk"),
+          covariate.labels=c("T0", "T1", "T2"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
+
+############################################################WITHIN-TREATMENT ANALYSIS############################################################
 
 #Balance Test Within Treatment Group, matched sample, controlling for treatment arm:
 balance1_within <- lm(data = appFinal_before_after %>% subset(Treatment_012==1 & propensity_score_sample==1), formula = promedio_cm_actual ~ abrio_cartilla + Treatment_0 + Treatment_1)
@@ -1645,6 +1900,53 @@ summary(balance6_within)
 
 stargazer(balance1_within,balance2_within, balance3_within, balance4_within, balance5_within, balance6_within, title="Balance - Within",
           dep.var.labels=c("Mean Math-Language Score", "Score Science Test", "Score HCSO Test", "Mean Cutoff (Inital ROL)", "Mean Wage (Initial ROL)", "Mean score (1rst Choice)"),
+          covariate.labels=c("Opened E-mail"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
+
+
+#Testing different propensity score specifications:
+
+    #T0:
+balance1_within0 <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 & propensity_score_sample==1), formula = mean_cutoff_before ~ abrio_cartilla  )
+summary(balance1_within0)
+balance1_within0_anais <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 & propensity_score_sample_anais==1), formula = mean_cutoff_before ~ abrio_cartilla  )
+summary(balance1_within0_anais)
+balance2_within0 <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 & propensity_score_sample==1), formula = mean_wage_before ~ abrio_cartilla )
+summary(balance2_within0)
+balance2_within0_anais <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 & propensity_score_sample_anais==1), formula = mean_wage_before ~ abrio_cartilla )
+summary(balance2_within0_anais)
+
+    #T1:
+balance1_within1 <- lm(data = appFinal_before_after %>% subset(Treatment_1==1 & propensity_score_sample==1), formula = mean_cutoff_before ~ abrio_cartilla  )
+summary(balance1_within1)
+balance1_within1_anais <- lm(data = appFinal_before_after %>% subset(Treatment_1==1 & propensity_score_sample_anais==1), formula = mean_cutoff_before ~ abrio_cartilla  )
+summary(balance1_within1_anais)
+balance2_within1 <- lm(data = appFinal_before_after %>% subset(Treatment_1==1 & propensity_score_sample==1), formula = mean_wage_before ~ abrio_cartilla )
+summary(balance2_within1)
+balance2_within1_anais <- lm(data = appFinal_before_after %>% subset(Treatment_1==1 & propensity_score_sample_anais==1), formula = mean_wage_before ~ abrio_cartilla )
+summary(balance2_within1_anais)
+
+    #T2:
+balance1_within2 <- lm(data = appFinal_before_after %>% subset(Treatment_2==1 & propensity_score_sample==1), formula = mean_cutoff_before ~ abrio_cartilla  )
+summary(balance1_within2)
+balance1_within2_anais <- lm(data = appFinal_before_after %>% subset(Treatment_2==1 & propensity_score_sample_anais==1), formula = mean_cutoff_before ~ abrio_cartilla  )
+summary(balance1_within2_anais)
+balance2_within2 <- lm(data = appFinal_before_after %>% subset(Treatment_2==1 & propensity_score_sample==1), formula = mean_wage_before ~ abrio_cartilla )
+summary(balance2_within2)
+balance2_within2_anais <- lm(data = appFinal_before_after %>% subset(Treatment_2==1 & propensity_score_sample_anais==1), formula = mean_wage_before ~ abrio_cartilla )
+summary(balance2_within2_anais)
+
+
+stargazer(balance1_within0, balance1_within0_anais, balance1_within1, balance1_within1_anais, balance1_within2, balance1_within2_anais, title="Balance - Mean Cutoffs",
+          dep.var.labels=c("Mean Cutoff (Inital ROL)"),
+          covariate.labels=c("Opened E-mail"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
+stargazer(balance2_within0, balance2_within0_anais, balance2_within1, balance2_within1_anais, balance2_within2, balance2_within2_anais, title="Balance - Mean Wages",
+          dep.var.labels=c("Mean Wage (Inital ROL)"),
           covariate.labels=c("Opened E-mail"),
           omit.stat=c("LL","ser","f"), single.row=FALSE)
 
@@ -1679,16 +1981,16 @@ summary(within_length4)
 within_length5 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1), formula = app_length_increase ~ abrio_cartilla)
 summary(within_length5)
 
-##Outcome: Nber Applications Added Ex-Post
-within_nber_added1 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_01 == 1), formula = nber_app_added ~ abrio_cartilla)
+##Outcome: Nber Programs Added Ex-Post
+within_nber_added1 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_01 == 1), formula = nber_progr_added ~ abrio_cartilla)
 summary(within_nber_added1)
-within_nber_added2 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_02 == 1), formula = nber_app_added ~ abrio_cartilla)
+within_nber_added2 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_02 == 1), formula = nber_progr_added ~ abrio_cartilla)
 summary(within_nber_added2)
-within_nber_added3 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_0 == 1), formula = nber_app_added ~ abrio_cartilla)
+within_nber_added3 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_0 == 1), formula = nber_progr_added ~ abrio_cartilla)
 summary(within_nber_added3)
-within_nber_added4 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1), formula = nber_app_added ~ abrio_cartilla)
+within_nber_added4 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1), formula = nber_progr_added ~ abrio_cartilla)
 summary(within_nber_added4)
-within_nber_added5 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1), formula = nber_app_added ~ abrio_cartilla)
+within_nber_added5 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1), formula = nber_progr_added ~ abrio_cartilla)
 summary(within_nber_added5)
 
 
@@ -1729,15 +2031,15 @@ within_error5 = lm(data = appFinal_before_after %>% subset(propensity_score_samp
 summary(within_error5)
 
 ##Outcome: Students who would not have been assigned given their ex-ante ROL Only: Is the student assigned ex-post?
-within_assign1 = lm(data = appFinal_before_after %>% subset(Treatment_01 == 1 & asignado_before==0), formula = asignado ~ abrio_cartilla)
+within_assign1 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_01 == 1 & asignado_before==0), formula = asignado ~ abrio_cartilla)
 summary(within_assign1)
-within_assign2 = lm(data = appFinal_before_after %>% subset(Treatment_02 == 1  & asignado_before==0), formula = asignado ~ abrio_cartilla)
+within_assign2 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_02 == 1  & asignado_before==0), formula = asignado ~ abrio_cartilla)
 summary(within_assign2)
-within_assign3 = lm(data = appFinal_before_after %>% subset(Treatment_0 == 1  & asignado_before==0), formula = asignado ~ abrio_cartilla)
+within_assign3 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_0 == 1  & asignado_before==0), formula = asignado ~ abrio_cartilla)
 summary(within_assign3)
-within_assign4 = lm(data = appFinal_before_after %>% subset(Treatment_1 == 1  & asignado_before==0), formula = asignado ~ abrio_cartilla)
+within_assign4 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1  & asignado_before==0), formula = asignado ~ abrio_cartilla)
 summary(within_assign4)
-within_assign5 = lm(data = appFinal_before_after %>% subset(Treatment_2 == 1  & asignado_before==0), formula = asignado ~ abrio_cartilla)
+within_assign5 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1  & asignado_before==0), formula = asignado ~ abrio_cartilla)
 summary(within_assign5) 
 
 ##Outcome: Students who would have been assigned given their ex-ante ROL Only: Is the student assigned to a different program ex-post?
@@ -1751,6 +2053,43 @@ within_assignprog4 = lm(data = appFinal_before_after %>% subset(propensity_score
 summary(within_assignprog4)
 within_assignprog5 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1  & asignado_before==1), formula = program_asig_change ~ abrio_cartilla)
 summary(within_assignprog5) 
+
+
+##Outcome: Increased risk
+within_increasedrisk1 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 &  Treatment_01 == 1  & risk_initial<=0.1), formula = increased_risk ~ abrio_cartilla)
+summary(within_increasedrisk1)
+within_increasedrisk2 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 &  Treatment_02 == 1  & risk_initial<=0.1), formula = increased_risk ~ abrio_cartilla)
+summary(within_increasedrisk2)
+within_increasedrisk3 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_0 == 1  & risk_initial<=0.1), formula = increased_risk ~ abrio_cartilla)
+summary(within_increasedrisk3)
+within_increasedrisk4 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1  & risk_initial<=0.1), formula = increased_risk ~ abrio_cartilla)
+summary(within_increasedrisk4)
+within_increasedrisk5 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1  & risk_initial<=0.1), formula = increased_risk ~ abrio_cartilla)
+summary(within_increasedrisk5) 
+
+##Outcome: Reduced risk
+within_reducedrisk1 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 &  Treatment_01 == 1  & risk_initial>0.7), formula = reduced_risk ~ abrio_cartilla)
+summary(within_reducedrisk1)
+within_reducedrisk2 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 &  Treatment_02 == 1  & risk_initial>0.7), formula = reduced_risk ~ abrio_cartilla)
+summary(within_reducedrisk2)
+within_reducedrisk3 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_0 == 1  & risk_initial>0.7), formula = reduced_risk ~ abrio_cartilla)
+summary(within_reducedrisk3)
+within_reducedrisk4 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1  & risk_initial>0.7), formula = reduced_risk ~ abrio_cartilla)
+summary(within_reducedrisk4)
+within_reducedrisk5 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1  & risk_initial>0.7), formula = reduced_risk ~ abrio_cartilla)
+summary(within_reducedrisk5) 
+
+##Outcome: Change in risk
+within_changerisk1 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 &  Treatment_01 == 1  & risk_initial>0.7), formula = change_risk ~ abrio_cartilla)
+summary(within_changerisk1)
+within_changerisk2 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 &  Treatment_02 == 1  & risk_initial>0.7), formula = change_risk ~ abrio_cartilla)
+summary(within_changerisk2)
+within_changerisk3 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_0 == 1  & risk_initial>0.7), formula = change_risk ~ abrio_cartilla)
+summary(within_changerisk3)
+within_changerisk4= lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1  & risk_initial>0.7), formula = change_risk ~ abrio_cartilla)
+summary(within_changerisk4)
+within_changerisk5 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1  & risk_initial>0.7), formula = change_risk ~ abrio_cartilla)
+summary(within_changerisk5) 
 
 
 stargazer(within_3,  within_4, within_5, within_length3, within_length4, within_length5,  title="Within-Treatment",
@@ -1767,4 +2106,192 @@ stargazer(within_error3,  within_error4, within_error5, within_assign3, within_a
           dep.var.labels=c("Error After", "Assigned After",   "Changed Progr. Assigned"),
           covariate.labels=c("Opened E-mail"),
           omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+stargazer(within_increasedrisk3,  within_increasedrisk4, within_increasedrisk5, within_reducedrisk3, within_reducedrisk4, within_reducedrisk5, within_changerisk3, within_changerisk4, within_changerisk5,  title="Within-Treatment - Risk",
+          dep.var.labels=c("Increased Risk", "Reduced After", "Changed Risk"),
+          covariate.labels=c("Opened E-mail"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
+
+
+
+############################################################MAJORS RECOMMENDATION IMPACT############################################################
+
+#Load new data:
+reco <- read.csv('~/Dropbox/Mistakes Structural/Code/R/recommendation/outputs/recommendations.csv', sep=',', header=TRUE)
+equiv <- read.csv('~/Dropbox/Mistakes Structural/Data/other/Tabla1IgnacioTomas.csv', sep=',', header=TRUE)
+
+#Keep only combination DEMRE code - major code:
+equiv %<>% select(Demre_ID, major_id)
+
+#Put the recommendation database in wide format:
+reco_wide <- reshape(reco, idvar= "MRUN", v.names= "Major_ID", timevar="Rec", direction = "wide")
+remove(reco)
+
+#Merge the recommendation database to the main dataset:
+appFinal_before_after = merge(appFinal_before_after,
+                              reco_wide,
+                              by = "MRUN",
+                              all.x = TRUE)
+
+
+#Put the initial ROL long:
+appFinal_before_after_long_initial = appFinal_before_after %>% select(MRUN, propensity_score_sample, abrio_cartilla, Treatment_0, Treatment_1, Treatment_2, Treatment_3, changed_app_after, Major_ID.1, Major_ID.2, Major_ID.3, Major_ID.4, CAR_CODIGO_1PREFER.x, CAR_CODIGO_2PREFER.x, CAR_CODIGO_3PREFER.x, CAR_CODIGO_4PREFER.x, CAR_CODIGO_5PREFER.x, CAR_CODIGO_6PREFER.x, CAR_CODIGO_7PREFER.x, CAR_CODIGO_8PREFER.x, CAR_CODIGO_9PREFER.x, CAR_CODIGO_10PREFER.x)
+appFinal_before_after_long_initial %<>% pivot_longer(cols = starts_with("CAR_CODIGO_"), names_to = c("rank"), names_prefix= "CAR_CODIGO_", values_to= "initial_rol")
+appFinal_before_after_long_initial$rank <- str_remove(appFinal_before_after_long_initial$rank, "PREFER.x")
+#Merge equivalence major/application code
+appFinal_before_after_long_initial = merge(appFinal_before_after_long_initial,
+                                           equiv,
+                                           by.x = "initial_rol", by.y = "Demre_ID",
+                                           all.x = TRUE)
+
+#Put the final ROL long:
+appFinal_before_after_long_final = appFinal_before_after %>% select(MRUN, CAR_CODIGO_1PREFER.y, CAR_CODIGO_2PREFER.y, CAR_CODIGO_3PREFER.y, CAR_CODIGO_4PREFER.y, CAR_CODIGO_5PREFER.y, CAR_CODIGO_6PREFER.y, CAR_CODIGO_7PREFER.y, CAR_CODIGO_8PREFER.y, CAR_CODIGO_9PREFER.y, CAR_CODIGO_10PREFER.y)
+appFinal_before_after_long_final %<>% pivot_longer(cols = starts_with("CAR_CODIGO_"), names_to = c("rank"), names_prefix= "CAR_CODIGO_", values_to= "final_rol")
+appFinal_before_after_long_final$rank <- str_remove(appFinal_before_after_long_final$rank, "PREFER.y")
+#Merge equivalence major/application code
+appFinal_before_after_long_final = merge(appFinal_before_after_long_final,
+                                         equiv,
+                                         by.x = "final_rol", by.y = "Demre_ID",
+                                         all.x = TRUE)
+
+
+#Merge both:
+appFinal_before_after_long = merge(appFinal_before_after_long_initial, appFinal_before_after_long_final, by=c("MRUN", "rank"))
+
+#Rename the major categories of the programs the student applied to:
+appFinal_before_after_long %<>% dplyr::rename(initial_rol_major=major_id.x)
+appFinal_before_after_long %<>% dplyr::rename(final_rol_major=major_id.y)
+
+#Replace final ROL by initial ROL if the student did not change his application after the intervention:
+appFinal_before_after_long %<>% mutate(final_rol = ifelse(changed_app_after==0, initial_rol, final_rol))
+appFinal_before_after_long %<>% mutate(final_rol_major = ifelse(changed_app_after==0, initial_rol_major, final_rol_major))
+
+#Re-order variable names:
+col_order <- c("MRUN", "Treatment_0", "Treatment_1", "Treatment_2", "Treatment_3", "propensity_score_sample", "abrio_cartilla", "changed_app_after", "Major_ID.1", "Major_ID.2", "Major_ID.3", "Major_ID.4", "rank", "initial_rol", "initial_rol_major", "final_rol", "final_rol_major")
+appFinal_before_after_long <- appFinal_before_after_long[, col_order]
+
+#Sort by student id, rank:
+appFinal_before_after_long %<>% arrange(MRUN, as.numeric(rank))
+
+
+#Create variables of interest:
+
+      ##Dummy=1 if an application corresponds to any of the four recommended majors:
+appFinal_before_after_long %<>% mutate(app_reco_initial = ifelse((initial_rol_major==Major_ID.1) | (initial_rol_major==Major_ID.2) | (initial_rol_major==Major_ID.3) | (initial_rol_major==Major_ID.4), 1, 0))
+appFinal_before_after_long %<>% mutate(app_reco_final = ifelse((final_rol_major==Major_ID.1) | (final_rol_major==Major_ID.2) | (final_rol_major==Major_ID.3) | (final_rol_major==Major_ID.4), 1, 0))
+
+      ##Dummy=1 if an application corresponds to any of the 3rd and 4th recommended majors:
+appFinal_before_after_long %<>% mutate(app_reco_initial_34 = ifelse((initial_rol_major==Major_ID.3) | (initial_rol_major==Major_ID.4), 1, 0))
+appFinal_before_after_long %<>% mutate(app_reco_final_34 = ifelse((final_rol_major==Major_ID.3) | (final_rol_major==Major_ID.4), 1, 0))
+
+      ##Change in the nber of programs from recommended majors (any) btw the initial and final ROL:
+appFinal_before_after_long = appFinal_before_after_long %>% group_by(MRUN) %>% mutate(app_reco_initial_nber= sum(app_reco_initial, na.rm = TRUE))
+appFinal_before_after_long %<>% mutate(app_reco_initial_nber= ifelse(is.na(Major_ID.1), NA, app_reco_initial_nber))
+appFinal_before_after_long = appFinal_before_after_long %>% group_by(MRUN) %>% mutate(app_reco_final_nber= sum(app_reco_final, na.rm = TRUE))
+appFinal_before_after_long %<>% mutate(app_reco_final_nber= ifelse(is.na(Major_ID.1), NA, app_reco_final_nber))
+appFinal_before_after_long %<>% mutate(change_reco_nber = app_reco_final_nber-app_reco_initial_nber)
+appFinal_before_after_long %<>% ungroup()
+
+      ##Change in the nber of programs from recommended majors (only from 3rd and 4th recommended majors) btw the initial and final ROL:
+appFinal_before_after_long = appFinal_before_after_long %>% group_by(MRUN) %>% mutate(app_reco34_initial_nber= sum(app_reco_initial_34, na.rm = TRUE))
+appFinal_before_after_long %<>% mutate(app_reco34_initial_nber= ifelse(is.na(Major_ID.1), NA, app_reco34_initial_nber))
+appFinal_before_after_long = appFinal_before_after_long %>% group_by(MRUN) %>% mutate(app_reco34_final_nber= sum(app_reco_final_34, na.rm = TRUE))
+appFinal_before_after_long %<>% mutate(app_reco34_final_nber= ifelse(is.na(Major_ID.1), NA, app_reco34_final_nber))
+appFinal_before_after_long %<>% mutate(change_reco34_nber = app_reco34_final_nber-app_reco34_initial_nber)
+appFinal_before_after_long %<>% ungroup()
+
+    ##Dummy=1 if the student introduced more programs from recommended majors (any or only 3rd and 4th recommended majors) btw the initial and final ROL:
+appFinal_before_after_long %<>% mutate(more_reco = ifelse(change_reco_nber>0, 1, 0))
+appFinal_before_after_long %<>% mutate(more_reco_34 = ifelse(change_reco34_nber>0, 1, 0))
+
+
+#Remove duplicates in terms of student id (in order to have again a dataset at the student level to run regressions):
+appFinal_before_after_student = appFinal_before_after_long %>% distinct(MRUN, .keep_all = TRUE)
+
+    ##Looking at some descriptives:
+table(appFinal_before_after_student %>% select(change_reco_nber), useNA = "always")
+table(appFinal_before_after_student %>% select(more_reco), useNA = "always")
+table(appFinal_before_after_student %>% select(change_reco34_nber), useNA = "always")
+table(appFinal_before_after_student %>% select(more_reco_34), useNA = "always")
+
+
+mean((appFinal_before_after_student %>% subset(Treatment_0 == 1))$more_reco)
+mean((appFinal_before_after_student %>% subset(Treatment_1 == 1))$more_reco)
+mean((appFinal_before_after_student %>% subset(Treatment_2 == 1))$more_reco)
+mean((appFinal_before_after_student %>% subset(Treatment_0 == 1 & abrio_cartilla==1))$more_reco)
+mean((appFinal_before_after_student %>% subset(Treatment_1 == 1 & abrio_cartilla==1))$more_reco)
+mean((appFinal_before_after_student %>% subset(Treatment_2 == 1 & abrio_cartilla==1))$more_reco)
+
+
+    ##Regressions: ITT analysis - T0 and T2 vs T1 (did not received recommendations)
+ITT_reco1 = lm(data = appFinal_before_after_student %>% subset(Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1), formula = more_reco ~ Treatment_0 + Treatment_2)
+summary(ITT_reco1)
+ITT_reco2 = lm(data = appFinal_before_after_student %>% subset(Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1), formula = change_reco_nber ~ Treatment_0 + Treatment_2)
+summary(ITT_reco2)
+ITT_reco3 = lm(data = appFinal_before_after_student %>% subset(Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1), formula = more_reco_34 ~ Treatment_0 + Treatment_2)
+summary(ITT_reco3)
+ITT_reco4 = lm(data = appFinal_before_after_student %>% subset(Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1), formula = change_reco34_nber ~ Treatment_0 + Treatment_2)
+summary(ITT_reco4)
+ITT_reco5 = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & app_reco34_initial_nber==0), formula = more_reco_34 ~ Treatment_0 + Treatment_2)
+summary(ITT_reco5)
+ITT_reco6 = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & app_reco34_initial_nber==0), formula = change_reco34_nber ~ Treatment_0 + Treatment_2)
+summary(ITT_reco6)
+
+stargazer(ITT_reco1, ITT_reco2, ITT_reco3, ITT_reco4, title="Intention-to-Treat - Recommendation of Other Majors",
+          dep.var.labels=c("Increased Nber Recommended Majors", "Change in # Recommended Majors", "Increased Nber Recommended Majors", "Change in # Recommended Majors"),
+          covariate.labels=c("T0", "T2"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
+
+##Regressions: Within-Treatment Effects
+within_reco1 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1), formula = more_reco ~ abrio_cartilla)
+summary(within_reco1)
+within_reco2 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1), formula = more_reco ~ abrio_cartilla)
+summary(within_reco2)
+within_reco3 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1), formula = more_reco ~ abrio_cartilla)
+summary(within_reco3)
+within_reco4 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1), formula = change_reco_nber ~ abrio_cartilla)
+summary(within_reco4)
+within_reco5 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1), formula = change_reco_nber ~ abrio_cartilla)
+summary(within_reco5)
+within_reco6 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1), formula = change_reco_nber ~ abrio_cartilla)
+summary(within_reco6)
+
+
+within_reco34_1 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_1)
+within_reco34_2 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_2)
+within_reco34_3 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_3)
+within_reco34_4 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_4)
+within_reco34_5 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_5)
+within_reco34_6 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_6)
+
+
+stargazer(within_reco34_1,  within_reco34_2, within_reco34_3, within_reco34_4, within_reco34_5, within_reco34_6, title="Within-Treatment - Recommendation of Other Majors",
+          dep.var.labels=c("More Recommendation", "Change Number Recommendations"),
+          covariate.labels=c("Opened E-mail"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
+within_reco34_7 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1 & app_reco34_initial_nber==0), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_7)
+within_reco34_8 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1 & app_reco34_initial_nber==0), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_8)
+within_reco34_9 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1 & app_reco34_initial_nber==0), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_9)
+within_reco34_10 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1 & app_reco34_initial_nber==0), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_10)
+within_reco34_11 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1 & app_reco34_initial_nber==0), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_11)
+within_reco34_12 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1 & app_reco34_initial_nber==0), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_12)
+
 
