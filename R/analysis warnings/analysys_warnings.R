@@ -2245,6 +2245,39 @@ stargazer(ITT_reco1, ITT_reco2, ITT_reco3, ITT_reco4, title="Intention-to-Treat 
           omit.stat=c("LL","ser","f"), single.row=FALSE)
 
 
+ITT_reco1_changed = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & changed_app_after==1), formula = more_reco ~ Treatment_0 + Treatment_2)
+summary(ITT_reco1_changed)
+ITT_reco2_changed = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & changed_app_after==1), formula = change_reco_nber ~ Treatment_0 + Treatment_2)
+summary(ITT_reco2_changed)
+ITT_reco3_changed = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & changed_app_after==1), formula = more_reco_34 ~ Treatment_0 + Treatment_2)
+summary(ITT_reco3_changed)
+ITT_reco4_changed = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & changed_app_after==1), formula = change_reco34_nber ~ Treatment_0 + Treatment_2)
+summary(ITT_reco4_changed)
+ITT_reco5_changed = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & app_reco34_initial_nber==0 & changed_app_after==1), formula = more_reco_34 ~ Treatment_0 + Treatment_2)
+summary(ITT_reco5_changed)
+ITT_reco6_changed = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & app_reco34_initial_nber==0 & changed_app_after==1), formula = change_reco34_nber ~ Treatment_0 + Treatment_2)
+summary(ITT_reco6_changed)
+
+stargazer(ITT_reco1_changed, ITT_reco2_changed, ITT_reco3_changed, ITT_reco4_changed,  title="Intention-to-Treat - Recommendation of Other Majors - Subsample of Students who Changed their ROL",
+          dep.var.labels=c("Increased Nber Recommended Majors", "Change in # Recommended Majors", "Increased Nber Recommended Majors", "Change in # Recommended Majors", "Increased Nber Recommended Majors", "Change in # Recommended Majors"),
+          covariate.labels=c("T0", "T2"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
+ITT_reco1_abrio = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & abrio_cartilla==1), formula = more_reco ~ Treatment_0 + Treatment_2)
+summary(ITT_reco1_abrio)
+ITT_reco2_abrio = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & abrio_cartilla==1), formula = change_reco_nber ~ Treatment_0 + Treatment_2)
+summary(ITT_reco2_abrio)
+ITT_reco3_abrio = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & abrio_cartilla==1), formula = more_reco_34 ~ Treatment_0 + Treatment_2)
+summary(ITT_reco3_abrio)
+ITT_reco4_abrio = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & abrio_cartilla==1), formula = change_reco34_nber ~ Treatment_0 + Treatment_2)
+summary(ITT_reco4_abrio)
+ITT_reco5_abrio = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & app_reco34_initial_nber==0 & abrio_cartilla==1), formula = more_reco_34 ~ Treatment_0 + Treatment_2)
+summary(ITT_reco5_abrio)
+ITT_reco6_abrio = lm(data = appFinal_before_after_student %>% subset((Treatment_0 == 1 | Treatment_1 == 1 | Treatment_2 == 1) & app_reco34_initial_nber==0 & abrio_cartilla==1), formula = change_reco34_nber ~ Treatment_0 + Treatment_2)
+summary(ITT_reco6_abrio)
+
+
 
 ##Regressions: Within-Treatment Effects
 within_reco1 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1), formula = more_reco ~ abrio_cartilla)
@@ -2259,6 +2292,35 @@ within_reco5 = lm(data = appFinal_before_after_student %>% subset(propensity_sco
 summary(within_reco5)
 within_reco6 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1), formula = change_reco_nber ~ abrio_cartilla)
 summary(within_reco6)
+
+
+stargazer(within_reco1,  within_reco2, within_reco3, within_reco4, within_reco5, within_reco6, title="Within-Treatment - Recommendation of Other Majors",
+          dep.var.labels=c("More Recommendation", "Change Number Recommendations"),
+          covariate.labels=c("Opened E-mail"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
+
+within_reco1_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1 & changed_app_after==1), formula = more_reco ~ abrio_cartilla)
+summary(within_reco1_changed)
+within_reco2_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1 & changed_app_after==1), formula = more_reco ~ abrio_cartilla)
+summary(within_reco2_changed)
+within_reco3_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1 & changed_app_after==1), formula = more_reco ~ abrio_cartilla)
+summary(within_reco3_changed)
+within_reco4_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1 & changed_app_after==1), formula = change_reco_nber ~ abrio_cartilla)
+summary(within_reco4_changed)
+within_reco5_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1 & changed_app_after==1), formula = change_reco_nber ~ abrio_cartilla)
+summary(within_reco5_changed)
+within_reco6_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1 & changed_app_after==1), formula = change_reco_nber ~ abrio_cartilla)
+summary(within_reco6_changed)
+
+
+stargazer(within_reco1_changed,  within_reco2_changed, within_reco3_changed, within_reco4_changed, within_reco5_changed, within_reco6_changed, title="Within-Treatment - Recommendation of Other Majors - Subsample of Students who Changed their ROL",
+          dep.var.labels=c("More Recommendation", "Change Number Recommendations"),
+          covariate.labels=c("Opened E-mail"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
 
 
 within_reco34_1 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1), formula = more_reco_34 ~ abrio_cartilla)
@@ -2281,6 +2343,28 @@ stargazer(within_reco34_1,  within_reco34_2, within_reco34_3, within_reco34_4, w
           omit.stat=c("LL","ser","f"), single.row=FALSE)
 
 
+
+within_reco34_1_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1  & changed_app_after==1), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_1_changed)
+within_reco34_2_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1  & changed_app_after==1), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_2_changed)
+within_reco34_3_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1  & changed_app_after==1), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_3_changed)
+within_reco34_4_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1  & changed_app_after==1), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_4_changed)
+within_reco34_5_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1  & changed_app_after==1), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_5_changed)
+within_reco34_6_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1  & changed_app_after==1), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_6_changed)
+
+
+stargazer(within_reco34_1_changed,  within_reco34_2_changed, within_reco34_3_changed, within_reco34_4_changed, within_reco34_5_changed, within_reco34_6_changed, title="Within-Treatment - Recommendation of Other Majors",
+          dep.var.labels=c("More Recommendation", "Change Number Recommendations"),
+          covariate.labels=c("Opened E-mail"),
+          omit.stat=c("LL","ser","f"), single.row=FALSE)
+
+
+
 within_reco34_7 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1 & app_reco34_initial_nber==0), formula = more_reco_34 ~ abrio_cartilla)
 summary(within_reco34_7)
 within_reco34_8 = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1 & app_reco34_initial_nber==0), formula = more_reco_34 ~ abrio_cartilla)
@@ -2295,3 +2379,17 @@ within_reco34_12 = lm(data = appFinal_before_after_student %>% subset(propensity
 summary(within_reco34_12)
 
 
+
+
+within_reco34_7_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1 & app_reco34_initial_nber==0  & changed_app_after==1), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_7_changed)
+within_reco34_8_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1 & app_reco34_initial_nber==0  & changed_app_after==1), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_8_changed)
+within_reco34_9_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1 & app_reco34_initial_nber==0 & changed_app_after==1), formula = more_reco_34 ~ abrio_cartilla)
+summary(within_reco34_9_changed)
+within_reco34_10_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_0 == 1 & app_reco34_initial_nber==0 & changed_app_after==1), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_10_changed)
+within_reco34_11_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_1 == 1 & app_reco34_initial_nber==0 & changed_app_after==1), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_11_changed)
+within_reco34_12_changed = lm(data = appFinal_before_after_student %>% subset(propensity_score_sample==1 & Treatment_2 == 1 & app_reco34_initial_nber==0 & changed_app_after==1), formula = change_reco34_nber ~ abrio_cartilla)
+summary(within_reco34_12_changed)
