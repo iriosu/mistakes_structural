@@ -58,8 +58,6 @@ asignacion_obtenida_bea_before <- read.csv('~/Dropbox/Mistakes Structural/Data/2
 bcu <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/ACCESO_BCU-8184.ETAPA2.csv', sep=';', header=TRUE)
 #bcu <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/ACCESO_BCU-8184.ETAPA2.csv', sep=';', header=TRUE, fileEncoding = "UTF-8-BOM")
 
-
-
 #Save as Rdata
 save(appList, file = "~/Dropbox/Mistakes Structural/Data/2021/AppList.Rdata")
 save(appFinal, file = "~/Dropbox/Mistakes Structural/Data/2021/appFinal.Rdata")
@@ -69,6 +67,70 @@ save(asignacion_obtenida_reg,file = "~/Dropbox/Mistakes Structural/Data/2021/asi
 save(asignacion_obtenida_reg_before,file = "~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_reg_before.Rdata")
 save(asignacion_obtenida_bea_before,file = "~/Dropbox/Mistakes Structural/Data/2021/asignacion_obtenida_bea_before.Rdata")
 save(bcu,file = "~/Dropbox/Mistakes Structural/Data/2021/ACCESO_BCU-8184.ETAPA2.Rdata")
+
+
+# Merging survey 2021 -----------------------------------------------------
+
+dfs_2021 = read.csv2("~/Dropbox/Mistakes Structural/Data/2021/survey files/survey-responses-2021.csv", sep = ",")
+apps_input_survey_2021 = read.csv2("~/Dropbox/Mistakes Structural/Data/2021/survey files/postulaciones_edited.csv", sep = ",") 
+dfs_2021 = merge(dfs_2021, apps_input_survey_2021, by.x = "id", by.y = "ID", all.x = TRUE)
+# Merging (INEXACT) by application lists an application scores
+# Create fake ID for appFinal
+Fake_app_id_fun = function(i, appFinal = appFinal){
+  #print(i)
+  fake_app_id = c()
+  for(p in 1:10){
+    code_car_aux = appFinal[i,paste("CAR_CODIGO_",p,"PREFER",sep="")]
+    if(code_car_aux == -1){
+      code_car_aux = 0
+    }
+    fake_app_id = c(fake_app_id, code_car_aux)
+  }
+  for(p in 1:10){
+    ptje_aux = appFinal[i,paste("PUNTAJE_CARR",p,sep="")]
+    if(is.na(ptje_aux)){
+      ptje_aux = 0
+    }
+    fake_app_id = c(fake_app_id, 100*ptje_aux)
+  }
+  aux = paste(fake_app_id, collapse = "_")
+  return(aux)
+}
+# Create fake ID for survey
+Fake_app_id_survey_fun = function(i, dfs_2021 = dfs_2021){
+  #print(i)
+  fake_app_id = c()
+  for(p in 1:10){
+    if(p < 10){
+      p = paste("0",p,sep="")
+    }
+    code_car_aux = dfs_2021[i,paste("COD_CARRERA_PREF_",p,sep="")]
+    if(is.na(code_car_aux)){
+      code_car_aux = 0
+    }
+    fake_app_id = c(fake_app_id, code_car_aux)
+  }
+  for(p in 1:10){
+    if(p < 10){
+      p = paste("0",p,sep="")
+    }
+    ptje_aux = dfs_2021[i,paste("PTJE_PREF_",p,sep="")]
+    if(is.na(ptje_aux)){
+      ptje_aux = 0
+    }
+    if(as.character(ptje_aux) == "NULL"){
+      ptje_aux = -1
+    }
+    ptje_aux = as.numeric(as.character(ptje_aux))
+    fake_app_id = c(fake_app_id, 100*ptje_aux)
+  }
+  aux = paste(fake_app_id, collapse = "_")
+  return(aux)
+}
+#Create fake ids
+dfs_2021$fake_app_id = sapply(1:nrow(dfs_2021), FUN = Fake_app_id_survey_fun, dfs_2021 = dfs_2021)
+appFinal$fake_app_id = sapply(1:nrow(appFinal), FUN = Fake_app_id_fun, appFinal = appFinal)
+
 
 # Before after vars -------------------------------------------------------
 
@@ -158,7 +220,7 @@ sum(duplicated(appFinal_before_cartilla$MRUN))
 mean(appFinal_before_cartilla$app_length)
 
 # Applications after cartilla
-#TODO: chenck if we are adding applications before sending the email
+#TODO: check if we are adding applications before sending the email
 appFinal_after_cartilla = appFinal %>% 
   subset((FECHA > "2021-02-13") | (FECHA == "2021-02-13" & (strptime(HORA, "%H:%M") >= strptime("23:00", "%H:%M"))))
 # Select the last application by student
@@ -199,6 +261,20 @@ mean(appFinal_before_after$app_length_change)
 table(appFinal_before_after$changed_app_after)
 
 
+# Merge to survey 2021 ----------------------------------------------------
+
+appFinal_before_after %<>% mutate(fake_app_id_final = ifelse(is.na(fake_app_id.y), fake_app_id.x, fake_app_id.y))
+sum(duplicated(appFinal_before_after$fake_app_id_final))
+sum(duplicated(dfs_2021$fake_app_id))
+#Drop duplicated IDs
+dup_ids_dfs_2021 = dfs_2021[duplicated(dfs_2021$fake_app_id), "fake_app_id"]
+dfs_2021 = dfs_2021[!(dfs_2021$fake_app_id %in% dup_ids_dfs_2021),]
+dup_ids_appFinal_before_after = appFinal_before_after[duplicated(appFinal_before_after$fake_app_id_final), 
+                                                      "fake_app_id_final"]
+appFinal_before_after_survey = appFinal_before_after[!(appFinal_before_after$fake_app_id_final %in% dup_ids_appFinal_before_after),]
+
+# Merge surevy to appFinal by last application
+appFinal_before_after_survey = merge(appFinal_before_after_survey, dfs_2021, by.x = "fake_app_id_final", by.y = "fake_app_id", all = FALSE)
 
 # BCU ---------------------------------------------------------------------
 
@@ -1228,12 +1304,6 @@ appFinal_before_after %>%
 
 save(appFinal_before_after, file = paste(path_intermediate_data, "appFinal_before_after.rds", sep=""))
 
-# Treatment effects -------------------------------------------------------
-
-#TODO: THIS PART HAS TO BE UPDATED WITH NACHO'S PROPENSITY MATCHING
-
-
-
 ## Treatment groups
 
 # Grupo 0 recibio todo
@@ -1242,51 +1312,6 @@ save(appFinal_before_after, file = paste(path_intermediate_data, "appFinal_befor
 # Grupo 3 recibio intervencion de puntajes (Pumi)
 # Treatment effects of Warnings: 0 minus 2
 # Treatment effects of Recomendations: 0 minus 1
-
-
-# Change in applications
-mean((appFinal_before_after %>% subset(Treatment_0 == 1 & abrio_cartilla == 0))$changed_app_after)
-mean((appFinal_before_after %>% subset(Treatment_1 == 1 & abrio_cartilla == 0))$changed_app_after)
-mean((appFinal_before_after %>% subset(Treatment_2 == 1 & abrio_cartilla == 0))$changed_app_after)
-mean((appFinal_before_after %>% subset(Treatment_3 == 1 & abrio_cartilla == 0))$changed_app_after)
-
-#
-mean((appFinal_before_after %>% subset(Treatment_0 == 1 & abrio_cartilla == 1))$changed_app_after)
-mean((appFinal_before_after %>% subset(Treatment_1 == 1 & abrio_cartilla == 1))$changed_app_after)
-mean((appFinal_before_after %>% subset(Treatment_2 == 1 & abrio_cartilla == 1))$changed_app_after)
-mean((appFinal_before_after %>% subset(Treatment_3 == 1 & abrio_cartilla == 1))$changed_app_after)
-
-# Regressions
-## changed_app_after = 1 if any change, 0 otherwise
-m_rel_2 = lm(data = appFinal_before_after %>% subset(abrio_cartilla == 1), formula = changed_app_after ~ Treatment_0 + Treatment_1)
-summary(m_rel_2)
-
-logit_rel_2 = glm(data = appFinal_before_after %>% subset(abrio_cartilla == 1), formula = changed_app_after ~ Treatment_0 + Treatment_1, family = 'binomial')
-summary(logit_rel_2)
-
-m_rel_0_2 = lm(data = appFinal_before_after %>% subset(abrio_cartilla == 1 & (Treatment == 0 | Treatment == 2)), formula = changed_app_after ~ Treatment_0)
-summary(m_rel_0_2)
-
-logit_rel_0_2 = glm(data = appFinal_before_after %>% subset(abrio_cartilla == 1 & (Treatment == 0 | Treatment == 2)), formula = changed_app_after ~ Treatment_0, family="binomial")
-summary(logit_rel_0_2)
-
-# Change in application length
-mean((appFinal_before_after %>% subset(abrio_cartilla == 0))$app_length_change)
-mean((appFinal_before_after %>% subset(Treatment_0 == 1 & abrio_cartilla == 1))$app_length_change)
-mean((appFinal_before_after %>% subset(Treatment_1 == 1 & abrio_cartilla == 1))$app_length_change)
-mean((appFinal_before_after %>% subset(Treatment_2 == 1 & abrio_cartilla == 1))$app_length_change)
-
-# Regressions
-m_0 = lm(data = appFinal_before_after %>% subset(abrio_cartilla == 1), formula = app_length_change ~ Treatment_0)
-m_1 = lm(data = appFinal_before_after %>% subset(abrio_cartilla == 1), formula = app_length_change ~ Treatment_1)
-m_2 = lm(data = appFinal_before_after %>% subset(abrio_cartilla == 1), formula = app_length_change ~ Treatment_2)
-summary(m_0)
-summary(m_1)
-summary(m_2)
-T_0_2_change_app_length = as.numeric(m_0$coefficients[2] - m_2$coefficients[2])
-
-m_0 = lm(data = appFinal_before_after %>% subset(abrio_cartilla == 1), formula = app_length_change ~ Treatment_0 + Treatment_1)
-summary(m_0)
 
 
 

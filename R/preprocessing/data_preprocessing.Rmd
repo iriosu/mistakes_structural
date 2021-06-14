@@ -1,0 +1,77 @@
+---
+title: "Analysis"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+---
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(rddtools)
+library(parallel)
+library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(knitr) 
+library(kableExtra)
+```
+
+# --------------------------------
+# Create data frame with applications before intervention and final applications by those who applied later
+# --------------------------------
+
+```{r}
+applications_interim <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/Reporte_diario_postulaciones_final_mrun.csv", sep=',', header=TRUE)
+applications_final <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/Reporte_diario_postulaciones_last_mrun.csv", sep=',', header=TRUE)
+names(applications_final) <- tolower(names(applications_final))
+names(applications_final)[3] <- "fecha_postulacion"
+```
+
+```{r}
+applications_interim$mrun <- as.character(applications_interim$mrun)
+applications_final$mrun <- as.character(applications_final$mrun)
+```
+
+
+```{r}
+diff_mrun <- setdiff(applications_final$mrun, applications_interim$mrun)
+```
+
+
+```{r}
+out <- rbind(applications_interim, applications_final %>% filter(mrun %in% diff_mrun) %>% as.data.frame() )
+```
+
+```{r}
+write.csv(out,  "/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/postulaciones_interim_merged_with_last_mrun.csv", row.names=FALSE)
+```
+
+
+
+

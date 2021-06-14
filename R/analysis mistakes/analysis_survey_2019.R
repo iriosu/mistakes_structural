@@ -107,10 +107,10 @@ hist(ratex_beliefs)
 
 # Load preprocessed data for 2019
 #NOTE: the data seems to have all the potential participants of the admission process of 2019
-#TODO: change the input to be consistent with the output of preprocess_data.R
 # currently we are copy-pasting the output of that script
 #dfs_2019 = readRDS("data/interim/bcd_and_survey_2019_20210325.rds")
-dfs_2019 = readRDS("data/interim/bcd_and_survey_2019_20210420.rds")
+#dfs_2019 = readRDS("data/interim/bcd_and_survey_2019_20210420.rds")
+dfs_2019 = readRDS("data/interim/bcd_and_survey_2019.rds")
 
 # Analyze first only students who answered completely the survey
 dfs_2019 %<>% filter(finished == "True")
@@ -130,6 +130,7 @@ dfs_2019 %<>% filter(pmax(PROMEDIO_LM_ACTUAL, PROMEDIO_LM_ANTERIOR) >= 450)
 hist(dfs_2019$duration[dfs_2019$duration < 60])
 sum(dfs_2019$duration < 60)
 sum(dfs_2019$duration > 5)
+
 #TODO: we need to define which students we exclude from the survey, because they take the survey in less that X minutes
 #Exlusion criteria
 dfs_2019 %<>% filter(duration >= 5)
@@ -1265,7 +1266,7 @@ dev.off()
 
 # Load panel of cutoffs
 #TODO: Nacho has to make this the path where he saves this object from preprocess_data.R
-cutoffs_panel = readRDS("mistakes_and_warnings/data/intermediate_data/panel_cutoffs_2004_2020.rds")
+cutoffs_panel = readRDS("data/interim/panel_cutoffs_2004_2020.rds")
 # Read Oferta to create a short panel of vacancies
 oferta_2018 = read.csv2("mistakes_and_warnings/data/Oferta/oferta2018_201812021829.csv", sep =";")
 oferta_2019 = read.csv2("mistakes_and_warnings/data/Oferta/oferta2019_201812021829.csv", sep =";")
@@ -1302,8 +1303,6 @@ View(dfs_cutoffs_2019_l %>% select(cutoff, cutoff_pref,
                                    vacs_tot_2019,cupos_tot_2019,
                                    vacs_tot_2020,cupos_tot_2020,
                                    codigo_car, pref))
-
-#TODO: Fx cutoff_pref that variable seems to be wrong
 
 # Compute bias with respect to cutoffs 2019 (Ratex) and cutoffs 2018 (Adaptive beliefs)
 dfs_cutoffs_2019_l %<>% mutate(dist_subj_cutofs_2019 = (cutoff - cutoff_2019)/sd(scores_carr),
@@ -1698,42 +1697,6 @@ bias_exp_cutoffs_tways = feols(data = dfs_cutoffs_2019_l_merged %>%
                                #as.factor(pref) | ID + codigo_car)
                                as.factor(pref) | ID)
 summary(bias_exp_cutoffs_tways)
-
-
-
-
-#TODO: Stargazer does not work with an object from the fixest package, we need to use etable it seems.
-#TODO: Redo the previous analysis but for dfs_beliefs_2019_l 
-
-# Stargazer the table to latex
-#library(stargazer)
-#stargazer(bias_exp_cutoffs_tways, 
-#          #bias_exp_cutoffs_norm_tways, 
-#          title="Two-way Fixed Effects Regression Results",
-#          align=TRUE, 
-#          #dep.var.labels=c("Bias in Expected cutoffs", "Norm of Bias in Expected cutoffs"),
-#          dep.var.labels=c("Bias in Expected cutoffs"),
-#          #single.row=TRUE,
-#          covariate.labels=c(#"Application score",
-#                             #"Application score quadratic",
-#                             #"Application score cubic",
-#                             "Distance score to cutoff (positive)",
-#                             "Distance score to cutoff (negative)",
-#                             #"Distance to cutoff quadratic",
-#                             #"Distance to cutoff cubic",
-#                             "Preference 2",
-#                             "Preference 3",
-#                             "Preference 4",
-#                             "Preference 5",
-#                             "Preference 6",
-#                             "Preference 7",
-#                             "Preference 8",
-#                             "Preference 9",
-#                             "Preference 10"),
-#          #omit = c("CODIGO_DEMRE_2015", "mothers_edu", "fathers_edu", "income"),
-#          label = "tab:two_way_fe",
-#          omit.stat=c("LL","ser","f", "aic"), no.space=TRUE, report = "vc*",
-#         type = "latex", out =  "mistakes_and_warnings/documents/draft/tables/two_way_fe_bias.tex")
 
 #Redoing the previous analysis but only for top-true preference
 dfs_mp_2019_merged %<>% mutate(distance_subj_2018_cutoffs_prop = ifelse(cutoff_2018 > 0,
