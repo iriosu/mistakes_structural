@@ -1504,6 +1504,12 @@ appFinal_before_after = merge(appFinal_before_after,
 appFinal_before_after %<>% mutate(promedio_cm_actual = as.numeric(gsub(",", ".", promedio_cm_actual)))
 appFinal_before_after %<>% mutate(promedio_lm_anterior = as.numeric(gsub(",", ".", promedio_lm_anterior)))
 
+    #Check randomization in terms of score/PACE status:
+table(appFinal_before_after %>% subset(promedio_cm_actual<450 & promedio_lm_anterior<450) %>% select(Treatment), useNA = "always")
+            ##2124 students in T0, 2146 in T1, 2105 in T2
+table(appFinal_before_after %>% subset(pace=="PACE") %>% select(Treatment), useNA = "always")
+            ##85 students in T0, 71 in T1, 52 in T2
+table(appFinal_before_after %>% subset(pace=="PACE" & promedio_cm_actual<450 & promedio_lm_anterior<450) %>% select(Treatment), useNA = "always")
 
     #Replace weigthed scores with those of initial ROL if the student did not modify it:
 appFinal_before_after %<>% mutate(PUNTAJE_CARR1.y = ifelse(changed_app_after==0,PUNTAJE_CARR1.x, PUNTAJE_CARR1.y ) ) 
