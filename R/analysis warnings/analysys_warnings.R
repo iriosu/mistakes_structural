@@ -1508,8 +1508,17 @@ appFinal_before_after %<>% mutate(promedio_lm_anterior = as.numeric(gsub(",", ".
 appFinal_before_after %<>% mutate(pace_dummy=ifelse(pace=="PACE", 1,0))
 appFinal_before_after %<>% mutate(bea_dummy=ifelse(bea=="BEA", 1,0))
 
-
+#Create a dummy: previous applicant, defined with respect to whether the student has a non-zero math-language average in the previous application process:
 appFinal_before_after %<>% mutate(previous_app=ifelse(promedio_lm_anterior!=0,1,0))
+
+
+#Normalize scores:
+appFinal_before_after %<>% mutate(promedio_cm_actual_norm=promedio_cm_actual/sd(promedio_cm_actual, na.rm=TRUE))
+appFinal_before_after %<>% mutate(promedio_lm_anterior_norm=promedio_lm_anterior/sd(promedio_lm_anterior, na.rm=TRUE))
+appFinal_before_after %<>% mutate(clec_actual_norm=clec_actual/sd(clec_actual, na.rm=TRUE))
+appFinal_before_after %<>% mutate(mate_actual_norm=mate_actual/sd(mate_actual, na.rm=TRUE))
+appFinal_before_after %<>% mutate(cien_actual_norm=cien_actual/sd(cien_actual, na.rm=TRUE))
+appFinal_before_after %<>% mutate(hcso_actual_norm=hcso_actual/sd(hcso_actual, na.rm=TRUE))
 
 
     #Check randomization in terms of score/PACE status:
@@ -1564,25 +1573,25 @@ table(appFinal_before_after[appFinal_before_after$changed_app_after==1 & appFina
 
 
 #Balance Tests T0/T1/T2:
-balance1_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = promedio_cm_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
+balance1_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = promedio_cm_actual_norm ~ Treatment_0 + Treatment_1)
 summary(balance1_test)
-balance2_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = cien_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
+balance2_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = cien_actual_norm ~ Treatment_0 + Treatment_1)
 summary(balance2_test)
-balance3_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = hcso_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
+balance3_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = hcso_actual_norm ~ Treatment_0 + Treatment_1)
 summary(balance3_test)
-balance4_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = mean_cutoff_before~ Treatment_0 + Treatment_1 + Treatment_2)
+balance4_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = mean_cutoff_before~ Treatment_0 + Treatment_1)
 summary(balance4_test)
-balance5_test<- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = mean_wage_before ~ Treatment_0 + Treatment_1 + Treatment_2)
+balance5_test<- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = mean_wage_before ~ Treatment_0 + Treatment_1)
 summary(balance5_test)
-balance6_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = PUNTAJE_CARR1.x ~ Treatment_0 + Treatment_1 + Treatment_2)
+balance6_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = PUNTAJE_CARR1.x ~ Treatment_0 + Treatment_1)
 summary(balance6_test)
-balance7_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = bea_dummy ~ Treatment_0 + Treatment_1 + Treatment_2)
+balance7_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = bea_dummy ~ Treatment_0 + Treatment_1)
 summary(balance7_test)
-balance8_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = previous_app ~ Treatment_0 + Treatment_1 + Treatment_2)
+balance8_test <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1), formula = previous_app ~ Treatment_0 + Treatment_1)
 summary(balance8_test)
-stargazer(balance1_test, balance2_test, balance3_test, balance4_test, balance7_test, balance8_test, title="Balance Tests",
-          dep.var.labels=c("Mean Math-Language Score", "Score Science Test", "Score HCSO Test", "Mean Cutoff (Inital ROL)", "Mean Wage (Initial ROL)", "Mean score (1rst Choice)"),
-          covariate.labels=c("Treatment 0", "Treatment 1", "Treatment 2"),
+stargazer(balance1_test, balance2_test, balance3_test, balance4_test, balance5_test, balance6_test, balance7_test, balance8_test, title="Balance Tests",
+          dep.var.labels=c("Mean Math-Language Score", "Score Science Test", "Score HCSO Test", "Mean Cutoff (Inital ROL)", "Mean Wage (Initial ROL)", "Mean score (1rst Choice)", "BEA Applicant", "Applied Before"),
+          covariate.labels=c("Treatment 0", "Treatment 1"),
           omit.stat=c("LL","ser","f"), single.row=FALSE)
 
 ############################################################BALANCE TESTS############################################################
