@@ -1885,6 +1885,7 @@ stargazer(ITT_11_error, ITT_12_error, ITT_13_error, ITT_14_error, ITT_18_error ,
 
     #Load Initial Risk Database
 #past:risk_initial <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/bootstrap_interim_admission_probabilities/applications_and_probs_last.csv', sep=';', header=TRUE)
+#We change the previous file to have the one used to create the different risk stratas:
 risk_initial <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/applications_and_probs_for_stratas.csv', sep=';', header=TRUE)
 risk_initial %<>% select(MRUN, overall_prob)
 risk_initial %<>% dplyr::rename(overall_prob_initial=overall_prob)
@@ -1909,9 +1910,9 @@ appFinal_before_after %<>% mutate(reduced_risk = ifelse(change_risk<0, 1, 0))
 appFinal_before_after %<>% mutate(increased_risk = ifelse(change_risk>0, 1, 0))
 
     #check the initial risk corresponds to strata definition
-table(appFinal_before_after %>% subset(risk_initial>=0.70) %>% select(Strata_2_label))
-table(appFinal_before_after %>% subset(risk_initial>=0.30 & risk_initial<0.70) %>% select(Strata_2_label))
-table(appFinal_before_after %>% subset(risk_initial<0.01) %>% select(Strata_2_label))
+table(appFinal_before_after %>% subset(risk_initial>=0.70) %>% select(Strata_2_label), useNA="always")                      #We have 9476 students in the Safety strata, 29 in Explore
+table(appFinal_before_after %>% subset(risk_initial>=0.30 & risk_initial<0.70) %>% select(Strata_2_label), useNA="always")  #Pb: 563 students in the safety strata
+table(appFinal_before_after %>% subset(risk_initial<0.01) %>% select(Strata_2_label), useNA="always")                       #Pb: 34,661 students in explore, 668 "safety and reach" and 11,398 NA
 
     #Regressions: T0 & T1 vs T2
 ITT_1_risk = lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 ) &  risk_initial!=0), formula = change_risk ~ Treatment_0 + Treatment_1)
