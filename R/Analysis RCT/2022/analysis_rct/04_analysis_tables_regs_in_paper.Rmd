@@ -1,0 +1,2042 @@
+
+---
+title: "Analysis + Tables + Regressions in Paper"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+header-includes:
+   - \usepackage{floatrow}
+   - \floatsetup[figure]{capposition=top}
+---
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+rm(list=ls())
+gc()
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(rlang)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(rddtools)
+library(parallel)
+library(evd)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+#library(tidyverse)
+library(haven)
+library(MASS)
+library(stringi)
+library(openxlsx)
+library(readxl)
+library(kableExtra)
+library(dplyr)
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+my_colors <- RColorBrewer::brewer.pal(4, "Pastel1")[1:2]
+myblue = '#2F5597'
+```
+
+```{r}
+dropbox_dir <- "~/Dropbox/"
+```
+
+# Analysis in paper ------------------------------
+```{r}
+#Read All probabilities with Ratex too (fixed)
+probstrue <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/outputs/2022/probs_for_true_results_fixed_with_ratex.csv", sep=''), sep=',', header=TRUE)
+probsofficial <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/outputs/2022/probs_for_official_results_fixed_with_ratex.csv", sep=''), sep=',', header=TRUE)
+probspartial <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/outputs/2022/probs_for_partial_results_fixed_with_ratex.csv", sep=''), sep=',', header=TRUE)
+#NOTE: probstrue has as pref 1 the top-true pref and pref 2 the bottom-true pref
+
+```
+
+```{r}
+#Read data files
+scores <- read.csv(file = paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/data/2022/puntajes_consolidado_v3.csv", sep=""), header=TRUE, sep=",")
+df <- readRDS(paste(dropbox_dir,"Mistakes Structural/Code/Python/Cartillas/outputs/2022/master_file_for_analysis_of_rct.csv", sep=''))
+#NOTE: probstrue has as pref 1 the top-true pref and pref 2 the bottom-true pref
+probstrue %<>% dplyr::rename(codigo_carrera_top_true    = codigo_carrera_1,
+                             marca_top_true             = marca_1 ,
+                             puntpond_top_true          = puntpond_1 ,
+                             prob_interim_top_true      = prob_interim_1 ,
+                             prob_adaptive_top_true     = prob_adaptive_1 ,
+                             prob_ratex_top_true        = prob_ratex_1,
+                             codigo_carrera_bottom_true = codigo_carrera_2,
+                             marca_bottom_true          = marca_2 ,
+                             puntpond_bottom_true       = puntpond_2 ,
+                             prob_interim_bottom_true   = prob_interim_2 ,
+                             prob_adaptive_bottom_true  = prob_adaptive_2 ,
+                             prob_ratex_bottom_true     = prob_ratex_2) %>%
+                             select("MRUN",
+                                    "codigo_carrera_top_true",
+                                    "marca_top_true",
+                                    "puntpond_top_true",
+                                    "prob_interim_top_true",
+                                    "prob_adaptive_top_true",
+                                    "prob_ratex_top_true",
+                                    "codigo_carrera_bottom_true",
+                                    "marca_bottom_true",
+                                    "puntpond_bottom_true",
+                                    "prob_interim_bottom_true",
+                                    "prob_adaptive_bottom_true",
+                                    "prob_ratex_bottom_true")
+
+survey <- readRDS(paste(dropbox_dir,"Mistakes Structural/Code/Python/Cartillas/outputs/2022/survey_processed_with_probs.rds", sep=''))
+#NOTE: this file has the subjective beliefs on probabilities (you can confirm this becaise probs have round values)
+# Merge survey with clean probs for toptrue and bottomtrue
+survey = merge(survey, probstrue %>% select(!c("codigo_carrera_top_true", "codigo_carrera_bottom_true","marca_top_true",
+                                               "puntpond_top_true", "marca_bottom_true", "puntpond_bottom_true")), by.x = "mrun", by.y = "MRUN", all.x = TRUE)
+
+dof <- merge(df, survey, by.x="MRUN", by.y="mrun", all.x=TRUE)
+dof <- merge(dof, probsofficial %>% dplyr::select(MRUN,
+                                       overall_interim, overall_adaptive, overall_ratex,
+                                       prob_interim_1, prob_adaptive_1, prob_ratex_1,
+                                       prob_interim_2, prob_adaptive_2, prob_ratex_2,
+                                       prob_interim_3, prob_adaptive_3, prob_ratex_3,
+                                       prob_interim_4, prob_adaptive_4, prob_ratex_4,
+                                       prob_interim_5, prob_adaptive_5, prob_ratex_5,
+                                       prob_interim_6, prob_adaptive_6, prob_ratex_6,
+                                       prob_interim_7, prob_adaptive_7, prob_ratex_7,
+                                       prob_interim_8, prob_adaptive_8, prob_ratex_8,
+                                       prob_interim_9, prob_adaptive_9, prob_ratex_9,
+                                       prob_interim_10, prob_adaptive_10,  prob_ratex_10 ) %>%
+               dplyr::rename(
+                             overall_prob_interim_fin = overall_interim,
+                             overall_prob_adaptive_fin = overall_adaptive,
+                             overall_prob_ratex_fin = overall_ratex,
+                             prob_interim_1_fin  = prob_interim_1, prob_adaptive_1_fin   = prob_adaptive_1,  prob_ratex_1_fin   = prob_ratex_1,
+                             prob_interim_2_fin  = prob_interim_2, prob_adaptive_2_fin   = prob_adaptive_2,  prob_ratex_2_fin   = prob_ratex_2,
+                             prob_interim_3_fin  = prob_interim_3, prob_adaptive_3_fin   = prob_adaptive_3,  prob_ratex_3_fin   = prob_ratex_3,
+                             prob_interim_4_fin  = prob_interim_4, prob_adaptive_4_fin   = prob_adaptive_4,  prob_ratex_4_fin   = prob_ratex_4,
+                             prob_interim_5_fin  = prob_interim_5, prob_adaptive_5_fin   = prob_adaptive_5,  prob_ratex_5_fin   = prob_ratex_5,
+                             prob_interim_6_fin  = prob_interim_6, prob_adaptive_6_fin   = prob_adaptive_6,  prob_ratex_6_fin   = prob_ratex_6,
+                             prob_interim_7_fin  = prob_interim_7, prob_adaptive_7_fin   = prob_adaptive_7,  prob_ratex_7_fin   = prob_ratex_7,
+                             prob_interim_8_fin  = prob_interim_8, prob_adaptive_8_fin   = prob_adaptive_8,  prob_ratex_8_fin   = prob_ratex_8,
+                             prob_interim_9_fin  = prob_interim_9, prob_adaptive_9_fin   = prob_adaptive_9,  prob_ratex_9_fin   = prob_ratex_9,
+                             prob_interim_10_fin = prob_interim_10, prob_adaptive_10_fin = prob_adaptive_10, prob_ratex_10_fin  = prob_ratex_10  ),
+             by="MRUN", all.x=TRUE)
+
+#  Add probabilities for partial portfolios (before the intervention)
+dof <- merge(dof, probspartial %>% dplyr::select(MRUN,
+                                              overall_interim, overall_adaptive, overall_ratex,
+                                              prob_interim_1, prob_adaptive_1, prob_ratex_1,
+                                              prob_interim_2, prob_adaptive_2, prob_ratex_2,
+                                              prob_interim_3, prob_adaptive_3, prob_ratex_3,
+                                              prob_interim_4, prob_adaptive_4, prob_ratex_4,
+                                              prob_interim_5, prob_adaptive_5, prob_ratex_5,
+                                              prob_interim_6, prob_adaptive_6, prob_ratex_6,
+                                              prob_interim_7, prob_adaptive_7, prob_ratex_7,
+                                              prob_interim_8, prob_adaptive_8, prob_ratex_8,
+                                              prob_interim_9, prob_adaptive_9, prob_ratex_9,
+                                              prob_interim_10, prob_adaptive_10,  prob_ratex_10 ) %>%
+                            dplyr::rename(overall_prob_interim_int = overall_interim,
+                                          overall_prob_adaptive_int = overall_adaptive,
+                                          overall_prob_ratex_int = overall_ratex,
+                                          prob_interim_1_int  = prob_interim_1, prob_adaptive_1_int   = prob_adaptive_1,  prob_ratex_1_int   = prob_ratex_1,
+                                          prob_interim_2_int  = prob_interim_2, prob_adaptive_2_int   = prob_adaptive_2,  prob_ratex_2_int   = prob_ratex_2,
+                                          prob_interim_3_int  = prob_interim_3, prob_adaptive_3_int   = prob_adaptive_3,  prob_ratex_3_int   = prob_ratex_3,
+                                          prob_interim_4_int  = prob_interim_4, prob_adaptive_4_int   = prob_adaptive_4,  prob_ratex_4_int   = prob_ratex_4,
+                                          prob_interim_5_int  = prob_interim_5, prob_adaptive_5_int   = prob_adaptive_5,  prob_ratex_5_int   = prob_ratex_5,
+                                          prob_interim_6_int  = prob_interim_6, prob_adaptive_6_int   = prob_adaptive_6,  prob_ratex_6_int   = prob_ratex_6,
+                                          prob_interim_7_int  = prob_interim_7, prob_adaptive_7_int   = prob_adaptive_7,  prob_ratex_7_int   = prob_ratex_7,
+                                          prob_interim_8_int  = prob_interim_8, prob_adaptive_8_int   = prob_adaptive_8,  prob_ratex_8_int   = prob_ratex_8,
+                                          prob_interim_9_int  = prob_interim_9, prob_adaptive_9_int   = prob_adaptive_9,  prob_ratex_9_int   = prob_ratex_9,
+                                          prob_interim_10_int = prob_interim_10, prob_adaptive_10_int = prob_adaptive_10, prob_ratex_10_int  = prob_ratex_10  ),
+                          by="MRUN", all.x=TRUE)
+
+dof %<>% mutate(responded_survey = ifelse(is.na(responded_survey), 0, responded_survey))
+
+#TODO: notice that here we are using as a minimum score the value 0 (we need to change this to the
+# maximum between minimum weighted score requirement and 210)
+of <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/data/2022/seleccion_20_01_22.csv", sep=''))
+car <- read.csv(paste(dropbox_dir, "/Mistakes Structural/Code/Python/Cartillas/data/2022/carreras_v2.csv", sep=''), header=TRUE, sep=";")
+
+#NOTE: Be careful here that we are identifying the columns by their order
+#TODO: We need to check that this order is correct
+of_l <- reshape(of[,c(1,4:53)], direction='long',
+                    varying=colnames(of[,4:53]),
+                    times=c('01', '02', '03', '04', '05', '06', '07', '08', '09', '10'),
+                    v.names=c('cod_carrera_pref', 'estado_pref','ptje_pref', 'lugar_pref', 'pond_acad_pref'),
+                    idvar='mrun')
+colnames(of_l) <- c("mrun", "pref", "codigo_carrera", "marca", "orden", "puntano", "puntpond") # this is just me not knowing how to use reshape
+
+cutoffs <- of_l %>% filter(marca == 24) %>% group_by(codigo_carrera) %>% dplyr::summarise(num_admitted = n(), min_score = pmax(min(puntpond), 210.0))
+car %<>% mutate(VACANTES_REG = VACANTES_1_SEMESTRE + VACANTES_2_SEMESTRE + SOBRECUPO_1_SEMESTRE + SOBRECUPO_2_SEMESTRE)
+car <- merge(car, cutoffs, by.x="CODIGO_DEMRE", by.y="codigo_carrera", all.x=TRUE)
+
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, VACANTES_REG, num_admitted, min_score) %>%
+               mutate(min_score = ifelse(num_admitted < VACANTES_REG, 210.0, min_score)) %>%
+               dplyr::rename(vacants_top_true = VACANTES_REG,
+                             num_admitted_top_true = num_admitted,
+                             min_score_top_true = min_score), by.x="codigo_carrera_top_true", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, VACANTES_REG, num_admitted, min_score) %>%
+               mutate(min_score = ifelse(num_admitted < VACANTES_REG, 210.0, min_score)) %>%
+               dplyr::rename(vacants_bottom_true = VACANTES_REG,
+                             num_admitted_bottom_true = num_admitted,
+                             min_score_bottom_true = min_score), by.x="codigo_carrera_bottom_true", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+
+dof %<>% mutate(applied_to_top_true_int = ifelse(codigo_carrera_top_true == codigo_carrera_1_int | codigo_carrera_top_true == codigo_carrera_2_int |
+                                              codigo_carrera_top_true == codigo_carrera_3_int | codigo_carrera_top_true == codigo_carrera_4_int |
+                                              codigo_carrera_top_true == codigo_carrera_5_int | codigo_carrera_top_true == codigo_carrera_6_int |
+                                              codigo_carrera_top_true == codigo_carrera_7_int | codigo_carrera_top_true == codigo_carrera_8_int |
+                                              codigo_carrera_top_true == codigo_carrera_9_int | codigo_carrera_top_true == codigo_carrera_10_int, 1, 0),
+                applied_to_bottom_true_int = ifelse(codigo_carrera_bottom_true == codigo_carrera_1_int | codigo_carrera_bottom_true == codigo_carrera_2_int |
+                                              codigo_carrera_bottom_true == codigo_carrera_3_int | codigo_carrera_bottom_true == codigo_carrera_4_int |
+                                              codigo_carrera_bottom_true == codigo_carrera_5_int | codigo_carrera_bottom_true == codigo_carrera_6_int |
+                                              codigo_carrera_bottom_true == codigo_carrera_7_int | codigo_carrera_bottom_true == codigo_carrera_8_int |
+                                              codigo_carrera_bottom_true == codigo_carrera_9_int | codigo_carrera_bottom_true == codigo_carrera_10_int, 1, 0))
+
+dof %<>% mutate(applied_to_top_true_fin = ifelse(codigo_carrera_top_true == codigo_carrera_1_fin | codigo_carrera_top_true == codigo_carrera_2_fin |
+                                              codigo_carrera_top_true == codigo_carrera_3_fin | codigo_carrera_top_true == codigo_carrera_4_fin |
+                                              codigo_carrera_top_true == codigo_carrera_5_fin | codigo_carrera_top_true == codigo_carrera_6_fin |
+                                              codigo_carrera_top_true == codigo_carrera_7_fin | codigo_carrera_top_true == codigo_carrera_8_fin |
+                                              codigo_carrera_top_true == codigo_carrera_9_fin | codigo_carrera_top_true == codigo_carrera_10_fin, 1, 0),
+                applied_to_bottom_true_fin = ifelse(codigo_carrera_bottom_true == codigo_carrera_1_fin | codigo_carrera_bottom_true == codigo_carrera_2_fin |
+                                              codigo_carrera_bottom_true == codigo_carrera_3_fin | codigo_carrera_bottom_true == codigo_carrera_4_fin |
+                                              codigo_carrera_bottom_true == codigo_carrera_5_fin | codigo_carrera_bottom_true == codigo_carrera_6_fin |
+                                              codigo_carrera_bottom_true == codigo_carrera_7_fin | codigo_carrera_bottom_true == codigo_carrera_8_fin |
+                                              codigo_carrera_bottom_true == codigo_carrera_9_fin | codigo_carrera_bottom_true == codigo_carrera_10_fin, 1, 0))
+
+dof %<>% mutate(ordering_mistake_int = ifelse(applied_to_top_true_int == 1 & codigo_carrera_top_true != codigo_carrera_1_fin, 1, 0),
+                ordering_mistake_fin = ifelse(applied_to_top_true_fin == 1 & codigo_carrera_top_true != codigo_carrera_1_fin, 1, 0))
+
+
+#TODO: Check this code with Nacho seems wrong to me
+# dof %<>% rowwise() %>% mutate(min_prob_adaptive_int = min(prob_adaptive_1_int + (codigo_carrera_1_int == 0), prob_adaptive_2_int + (codigo_carrera_2_int == 0),
+#                                                       prob_adaptive_3_int + (codigo_carrera_3_int == 0), prob_adaptive_4_int + (codigo_carrera_4_int == 0),
+#                                                       prob_adaptive_5_int + (codigo_carrera_5_int == 0), prob_adaptive_6_int + (codigo_carrera_6_int == 0),
+#                                                       prob_adaptive_7_int + (codigo_carrera_7_int == 0), prob_adaptive_8_int + (codigo_carrera_8_int == 0),
+#                                                       prob_adaptive_9_int + (codigo_carrera_9_int == 0), prob_adaptive_10_int + (codigo_carrera_10_int == 0)))
+
+# dof %<>% rowwise() %>% mutate(min_prob_adaptive_fin = min(prob_adaptive_1_fin + (codigo_carrera_1_fin == 0), prob_adaptive_2_fin + (codigo_carrera_2_fin == 0),
+#                                                       prob_adaptive_3_fin + (codigo_carrera_3_fin == 0), prob_adaptive_4_fin + (codigo_carrera_4_fin == 0),
+#                                                       prob_adaptive_5_fin + (codigo_carrera_5_fin == 0), prob_adaptive_6_fin + (codigo_carrera_6_fin == 0),
+#                                                       prob_adaptive_7_fin + (codigo_carrera_7_fin == 0), prob_adaptive_8_fin + (codigo_carrera_8_fin == 0),
+#                                                       prob_adaptive_9_fin + (codigo_carrera_9_fin == 0), prob_adaptive_10_fin + (codigo_carrera_10_fin == 0)))
+
+#TODO: Becareful with the sign here, it might not be consistent with the definitions in the paper
+dof %<>% mutate(bias_in_belief_ratex_top_true    = as.numeric(prob_top_true) - as.numeric(prob_ratex_top_true)*100,
+                bias_in_belief_ratex_bottom_true = as.numeric(prob_bottom_true) - as.numeric(prob_ratex_bottom_true)*100)
+#TODO: review this definition
+dof %<>% mutate(bias_in_belief_overall_ratex =  as.numeric(prob_any_pref) - as.numeric(overall_prob_ratex_fin)*100,
+                bias_in_belief_risk_ratex =  (100 - as.numeric(prob_any_pref)) - (1 - as.numeric(overall_prob_ratex_fin))*100)
+hist(dof$bias_in_belief_risk_ratex)
+```
+
+```{r}
+# ELIMINAR PACES HABILITADOS
+paces <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/data/2022/habilitados_pace_v2.csv", sep=''), sep=',', header=TRUE, fileEncoding = 'UTF-8-BOM') #had to add encoding option
+paces %<>% mutate(habilitado = ifelse(criterio_1 == 1 & criterio_2 == 1 & criterio_3 == 1, 1, 0))
+paces_ids <- paces %>% filter(habilitado == 1) %>% pull(mrun)
+dof %<>% filter(!(MRUN %in% paces_ids))
+```
+
+
+```{r}
+hist(dof$overall_prob_adaptive_int)
+hist(dof$overall_prob_adaptive_fin)
+```
+
+## Tables from paper
+
+```{r}
+path_draft_tables = paste(dropbox_dir, "Mistakes Structural/Code/R/tables", sep = "")
+```
+
+```{r}
+dof %<>% mutate(open_label = ifelse(open == 1, "Yes", ifelse(open == 0, "No", NA)))
+dof %<>% mutate(treatment_label = ifelse(treatment == 1, "T1",
+                                         ifelse(treatment == 2, "T2",
+                                                ifelse(treatment == 3, "T3",
+                                                       ifelse(treatment == 4, "T4", NA)))))
+dof %<>% mutate(treatment_combined = treatment,
+                treatment_combined = ifelse(treatment == 2 | treatment == 3, 5, treatment))
+table(dof$treatment_combined)
+dof = merge(dof, scores %>% select(promedio_cm_actual, promedio_cm_anterior, mrun), by.x = "MRUN", by.y = "mrun", all.x = TRUE)
+dof %<>% mutate(promedio_cm_anterior = as.numeric(gsub(",", ".", as.character(promedio_cm_anterior))),
+  prom_cm  = pmax(promedio_cm_actual, promedio_cm_anterior),
+                    prom_cm_above_450 = ifelse(prom_cm >= 450, 1, 0))
+
+```
+
+## Creating some mistake variables
+```{r}
+dof %<>% mutate(reduced_mistakes = ifelse(changed == 1 & valid_apps_before < valid_apps_after, 1, 0),
+                not_increased_mistakes = ifelse(changed == 1 & valid_apps_before <= valid_apps_after, 1, 0),
+               reduced_share_mistakes = ifelse(changed == 1 & valid_apps_before/apps_before < valid_apps_after/apps_after, 1, 0),
+                 not_increased_share_mistakes = ifelse(changed == 1 & valid_apps_before/apps_before <= valid_apps_after/apps_after, 1, 0)) %>%
+   mutate(overall_prob_ratex_inc = ifelse(overall_prob_ratex_fin > overall_prob_ratex_int, 1, 0),
+                                risk_ratex_dec = ifelse((1 - overall_prob_ratex_fin) < (1- overall_prob_ratex_int), 1, 0),                                
+          risk_ratex_inc = ifelse((1 - overall_prob_ratex_fin) > (1- overall_prob_ratex_int), 1, 0),
+          risk_ratex_not_inc = ifelse((1 - overall_prob_ratex_fin) <= (1- overall_prob_ratex_int), 1, 0),
+                                overall_prob_ratex_inc_abs = overall_prob_ratex_fin - overall_prob_ratex_int,
+                                applied_to_top_true_fin_in_top_pref = ifelse(applied_to_top_true_fin == 1 & codigo_carrera_top_true == codigo_carrera_1_fin, 1, 0),
+           applied_to_top_true_int_in_top_pref = ifelse(applied_to_top_true_int == 1 & codigo_carrera_top_true == codigo_carrera_1_int, 1, 0),
+                                not_applied_to_top_true_fin_in_top_pref =  ifelse(applied_to_top_true_fin_in_top_pref == 1, 0, 1),
+                                not_applied_to_top_true_fin =  ifelse(applied_to_top_true_fin == 1, 0, 1))
+
+```
+
+               
+               
+### Aggregate statistics by treatment and group
+```{r}
+#kable(dof %>% group_by(treatment) %>% dplyr::summarise(n=n(), op = mean(open)*100, c=mean(changed)*100,  inc = mean(increased_valid)*100, dec = mean(decreased_valid)*100, as = mean(assigned_oficial)*100, ent=mean(entered)*100, lef=mean(left)*100, cs=mean(changed_status_ass)*100, cp=mean(changed_program_ass)*100), digits=3)
+
+#kable(dof %>% group_by(treatment) %>% dplyr::summarise(n=n(), op = 100*sd(open)/sqrt(n()), c=100*sd(changed)/sqrt(n()),  inc = 100*sd(increased_valid)/sqrt(n()), dec = 100*sd(decreased_valid)/sqrt(n()), as = 100*sd(assigned_oficial)/sqrt(n()), ent=100*sd(entered)/sqrt(n()), lef=100*sd(left)/sqrt(n()), cs=100*sd(changed_status_ass)/sqrt(n()), cp=100*sd(changed_program_ass)/sqrt(n())), digits=3)
+
+#Create Latex table by hand
+table_summary_stats_by_group = dof %>% group_by(treatment_label) %>%
+  dplyr::summarise(n   = n(),
+                   op  = round(mean(open)*100, 3),
+                   c   = round(mean(changed)*100, 3),
+                   inc = round(mean(increased_valid)*100, 3),
+                   dec = round(mean(decreased_valid)*100, 3),
+                   as  = round(mean(assigned_oficial)*100, 3),
+                   ent = round(mean(entered)*100, 3),
+                   lef = round(mean(left)*100, 3),
+                   cs  = round(mean(changed_status_ass)*100, 3),
+                   cp  = round(mean(changed_program_ass)*100, 3))
+table_summary_stats_by_group
+
+table_summary_stats_by_group_stderr = dof %>% group_by(treatment_label) %>%
+  dplyr::summarise(n   = n(),
+                   op  = round(100*sd(open)/sqrt(n()), 3),
+                   c   = round(100*sd(changed)/sqrt(n()), 3),
+                   inc = round(100*sd(increased_valid)/sqrt(n()), 3),
+                   dec = round(100*sd(decreased_valid)/sqrt(n()), 3),
+                   as  = round(100*sd(assigned_oficial)/sqrt(n()), 3),
+                   ent = round(100*sd(entered)/sqrt(n()), 3),
+                   lef = round(100*sd(left)/sqrt(n()), 3),
+                   cs  = round(100*sd(changed_status_ass)/sqrt(n()), 3),
+                   cp  = round(100*sd(changed_program_ass)/sqrt(n()), 3))
+table_summary_stats_by_group_stderr
+
+#Write latex table by hand
+table_latex_file = file(paste(path_draft_tables,"stats_by_treatment.tex", sep=""))
+table_header = c("\\begin{table}[H]",
+                 "\\caption{Summary Statistics by Group}",
+                 "\\label{tab:table_treatment_stats}",
+                 "\\centerline{",
+                 "\\scalebox{0.7}{",
+                 "\\begin{tabular}{lcccccccccc}",
+                 "\\toprule",
+                 "& & & \\multicolumn{3}{c}{Application} & \\multicolumn{5}{c}{Assignment} \\\\",
+                 "\\cmidrule(lr){4-6}\\cmidrule(lr){7-11}")
+table_columns = paste("Treatment",
+                      "Total",
+                      "\\makecell*[c]{Opened [\\%]}",
+                      "Modified [\\%]",
+                      "\\makecell*[c]{Increased [\\%]}",
+                      "\\makecell*[c]{Decreased [\\%]}",
+                      "Assigned [\\%]",
+                      "Entered [\\%]",
+                      "Left [\\%]",
+                      "\\makecell*[c]{Changed  \\\\ status [\\%]}",
+                      "\\makecell*[c]{Changed  \\\\ program [\\%]}",
+                      sep = " & ")
+table_body = paste(table_columns, "\\\\" ," \\midrule")
+
+space = '\\\\[0pt]'
+table_stats = table_summary_stats_by_group
+table_sterr_stats = table_summary_stats_by_group_stderr
+#Fill table body
+for(i in 1:nrow(table_stats)){
+  row = c()
+  for(j in 1:ncol(table_stats)){
+    row_stat = table_stats[i,j]
+    if(j == 1){
+      row = row_stat
+    }
+    else{
+      row = paste(row, "&", row_stat)
+    }
+  }
+  row = paste(row, space)
+  table_body = c(table_body, row)
+  # Paste row for standard errors
+  row = c()
+  for(j in 1:ncol(table_sterr_stats)){
+    row_stat = table_sterr_stats[i,j]
+    if(j != 1){
+      if(j == 2){
+        row = paste(row, "&", "")
+      }else{
+        row = paste(row, "&", paste("(",row_stat,")",sep=""))
+      }
+    }
+  }
+  row = paste(row, space)
+  table_body = c(table_body, row)
+}
+
+table_footer = c("\\bottomrule",
+                 "\\end{tabular}",
+                 "}}",
+                 "{\\scriptsize Note: Opened is a binary variable equal to 1 if the student opened the personalized website, 0 otherwise. Modified is a binary variable equal to 1 if the student modified its application after the personalized websites were sent, 0 otherwise. Increased (decreased) is a binary variable equal to 1 if the student increased (decreased) the number of valid applications in their list, 0 otherwise. Assigned is a binary variable equal to 1 if the student resulted assigned at the end of the process, 0 otherwise. Entered (left) is a binary variable equal to 1 if the student resulted unassigned (assigned) given their list of preferences before the intervention and (un)assigned  given their preferenes after the intervention, 0 otherwise. Changed status (program) is a binary variable equal to 1 if the student changed their status (program) of assignment considering the list of preferences submitted before and after the intervention. Standard errors reported in parenthesis.}",
+                 "\\end{table}")
+table_latex_code = c(table_header, table_body, table_footer)
+writeLines(table_latex_code, table_latex_file)
+close(table_latex_file)
+
+```
+
+### Aggregate statistics by group and open
+```{r}
+#kable(dof %>% group_by(treatment, open) %>% dplyr::summarise(n=n(), c=mean(changed)*100,  inc = mean(increased_valid)*100, dec = mean(decreased_valid)*100, ent=mean(entered)*100, lef=mean(left)*100, cs=mean(changed_status_ass)*100, cp=mean(changed_program_ass)*100), digits=3)
+
+#kable(dof %>% group_by(treatment, open) %>% dplyr::summarise(n=n(), c=sd(changed),  inc = sd(increased_valid), dec = sd(decreased_valid), ent=sd(entered), lef=sd(left), cs=sd(changed_status_ass), cp=sd(changed_program_ass)), digits=3)
+
+#Create Latex table by hand
+table_summary_stats_by_group = dof %>% group_by(treatment_label, open_label) %>%
+dplyr::summarise(n   = n(),
+                 c   = round(mean(changed)*100,3),
+                 inc = round(mean(increased_valid)*100,3),
+                 dec = round(mean(decreased_valid)*100,3),
+                 ent = round(mean(entered)*100,3),
+                 lef = round(mean(left)*100,3),
+                 cs  = round(mean(changed_status_ass)*100,3),
+                 cp  = round(mean(changed_program_ass)*100,3))
+table_summary_stats_by_group
+
+table_summary_stats_by_group_stderr = dof %>% group_by(treatment_label, open_label) %>%
+  dplyr::summarise(n   = n(),
+                   c   = round(100*sd(changed)/sqrt(n()), 3),
+                   inc = round(100*sd(increased_valid)/sqrt(n()), 3),
+                   dec = round(100*sd(decreased_valid)/sqrt(n()), 3),
+                   ent = round(100*sd(entered)/sqrt(n()), 3),
+                   lef = round(100*sd(left)/sqrt(n()), 3),
+                   cs  = round(100*sd(changed_status_ass)/sqrt(n()), 3),
+                   cp  = round(100*sd(changed_program_ass)/sqrt(n()), 3))
+table_summary_stats_by_group_stderr
+
+#Write latex table by hand
+table_latex_file = file(paste(path_draft_tables,"stats_by_treatment_and_open.tex", sep=""))
+table_header = c("\\begin{table}[H]",
+                 "\\caption{Summary Statistics by Group and Reception}",
+                 "\\label{tab:table_treatment_abrio_stats}",
+                 "\\centerline{\\scalebox{0.7}{",
+                 "\\begin{tabular}{lcccccccccc}",
+                 "\\toprule",
+                 "  & & & \\multicolumn{3}{c}{Application} & \\multicolumn{4}{c}{Assignment} \\\\",
+                 "\\cmidrule(lr){4-6}\\cmidrule(lr){7-10}")
+table_columns = paste("Treatment",
+                      "\\makecell*[c]{Opened}",
+                      "\\(N\\)",
+                      "Modified [\\%]",
+                      "\\makecell*[c]{Increased [\\%]}",
+                      "\\makecell*[c]{Decreased [\\%]}",
+                      "Entered [\\%]",
+                      "Left [\\%]",
+                      "\\makecell*[c]{Changed  \\\\ status [\\%]}",
+                      "\\makecell*[c]{Changed  \\\\ program [\\%]}",
+                      sep = " & ")
+table_body = paste(table_columns, "\\\\" ," \\midrule")
+
+space = '\\\\[0pt]'
+table_stats = table_summary_stats_by_group
+table_sterr_stats = table_summary_stats_by_group_stderr
+#Fill table body
+for(i in 1:nrow(table_stats)){
+  row = c()
+  for(j in 1:ncol(table_stats)){
+    row_stat = table_stats[i,j]
+    if(j == 1){
+      row = row_stat
+    }
+    else{
+      row = paste(row, "&", row_stat)
+    }
+  }
+  row = paste(row, space)
+  table_body = c(table_body, row)
+  # Paste row for standard errors
+  row = c()
+  for(j in 1:ncol(table_sterr_stats)){
+    row_stat = table_sterr_stats[i,j]
+    if(j != 1){
+      if(j == 2 | j == 3){
+        row = paste(row, "&", "")
+      }else{
+        row = paste(row, "&", paste("(",row_stat,")",sep=""))
+      }
+    }
+  }
+  row = paste(row, space)
+  table_body = c(table_body, row)
+}
+
+table_footer = c("\\bottomrule",
+                 "\\end{tabular}",
+                 "}}",
+                 "{\\scriptsize Note: Opened is a binary variable equal to 1 if the student opened the personalized website, 0 otherwise. Modified is a binary variable equal to 1 if the student modified its application after the personalized websites were sent, 0 otherwise. Increased (decreased) is a binary variable equal to 1 if the student increased (decreased) the number of valid applications in their list, 0 otherwise. Entered (left) is a binary variable equal to 1 if the student resulted unassigned (assigned) given their list of preferences before the intervention and (un)assigned  given their preferenes after the intervention, 0 otherwise. Changed status (program) is a binary variable equal to 1 if the student changed their status (program) of assignment considering the list of preferences submitted before and after the intervention. Standard errors reported in parenthesis.}",
+                 "\\end{table}")
+table_latex_code = c(table_header, table_body, table_footer)
+writeLines(table_latex_code, table_latex_file)
+close(table_latex_file)
+
+```
+
+```{r}
+dof %<>% mutate(decreased_invalid = ifelse(apps_before - valid_apps_before > apps_after - valid_apps_after, 1, 0 ))
+
+#create new variable: aggregate treatment
+
+dof %<>% mutate(agg_treatment=ifelse(treatment==4, 1, treatment))
+
+dof %<>% mutate(change_ratex = overall_prob_ratex_fin-overall_prob_ratex_int)
+
+```
+
+```{r}
+# Identifying inconsistent types
+dof %<>% mutate(inconsistent_type = 0)
+dof %<>% mutate(inconsistent_type = ifelse(((is.na(QID87_2 ) == FALSE) | (is.na(QID87_3 ) ==FALSE)) & ((applied_to_top_true_fin == 1 & applied_to_top_true_fin_in_top_pref==0) | applied_to_top_true_fin == 0), 1, inconsistent_type))
+```
+
+
+```{r}
+reg_changed_aggr <- glm(changed ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_changed_aggr)
+reg_changed <- glm(changed ~ factor(treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_changed)
+
+reg_inc_aggr <- glm(increased_valid ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_inc_aggr)
+reg_inc <- glm(increased_valid ~ factor(treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_inc)
+
+reg_dec_aggr <- glm(decreased_valid ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1))
+reg_dec_aggr <- glm(decreased_valid ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1 & prom_cm_above_450==1))
+summary(reg_dec_aggr)
+reg_dec <- glm(decreased_valid ~ factor(treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_dec)
+
+reg_st_ass_aggr <- lm(changed_status_ass ~ factor(agg_treatment), data=dof %>% subset(open==1))
+summary(reg_st_ass_aggr)
+reg_st_ass_aggr <- glm(changed_status_ass ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_st_ass_aggr)
+reg_st_ass <- glm(changed_status_ass ~ factor(treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_st_ass)
+
+reg_pr_ass_aggr <- lm(changed_program_ass ~ factor(agg_treatment), data=dof %>% subset(open==1))
+summary(reg_pr_ass_aggr)
+reg_st_ass_aggr <- glm(changed_program_ass ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_st_ass_aggr)
+reg_pr_ass <- glm(changed_program_ass ~ factor(treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_pr_ass)
+
+#NEW
+reg_ent_aggr1 <- lm(assigned_int ~ factor(treatment), data=dof %>% subset(open==1))
+summary(reg_ent_aggr1) 
+reg_ent_aggr1 <- lm(assigned_fin ~ factor(agg_treatment), data=dof %>% subset(open==1 & overall_prob_ratex_int==0.00))
+summary(reg_ent_aggr1) 
+reg_ent_aggr1 <- lm(assigned_fin ~ factor(agg_treatment), data=dof %>% subset(open==1 & overall_prob_ratex_int==0.00 & prom_cm_above_450==1))
+summary(reg_ent_aggr1) 
+reg_ent_aggr1 <- lm(entered ~ factor(agg_treatment), data=dof %>% subset(open==1 & assigned_int==0))
+summary(reg_ent_aggr1) 
+reg_ent_aggr1 <- lm(entered ~ factor(agg_treatment), data=dof %>% subset(open==1 & assigned_int==0 & prom_cm_above_450==1))
+summary(reg_ent_aggr1) 
+reg_ent1 <- lm(entered ~ factor(treatment), data=dof %>% subset(open==1 & assigned_int==0))
+summary(reg_ent1)
+reg_ent1 <- lm(entered ~ factor(treatment), data=dof %>% subset(open==1 & assigned_int==0 & prom_cm_above_450==1))
+summary(reg_ent1)
+reg_ent_aggr2 <- glm(entered ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_ent_aggr2)
+reg_ent2 <- glm(entered ~ factor(treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_ent2)
+reg_ent_aggr3 <- glm(entered ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1 & assigned_int==0))
+summary(reg_ent_aggr3)
+reg_ent3 <- glm(entered ~ factor(treatment), family="binomial", data=dof %>% subset(open==1 & assigned_int==0))
+summary(reg_ent3)
+reg_ent = reg_ent3
+#Overall, we find large and positive effects with respect to entering (being assigned if not assigned with interim ROL) from both T2 and T3, especially T3. The effect for T2 is significant only when using the aggregate treatments.
+
+
+
+reg_lft_agg <- glm(left ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1 & assigned_int==1))
+summary(reg_lft_agg)
+reg_lft1 <- glm(left ~ factor(treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_lft1)
+reg_lft2 <- glm(left ~ factor(treatment), family="binomial", data=dof %>% subset(open==1 & assigned_int==1))
+summary(reg_lft2)
+reg_lft = reg_lft2 
+
+#NEW:
+reg_top_true1_mist_aggr <- lm(applied_to_top_true_fin ~ factor(agg_treatment),data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true = 0.0))
+summary(reg_top_true1_mist_aggr)
+reg_top_true1_mist_aggr <- glm(applied_to_top_true_fin ~ factor(treatment), family = "binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true = 0.0))
+summary(reg_top_true1_mist_aggr)
+reg_top_true1_mist <- lm(applied_to_top_true_fin ~ factor(treatment),data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true = 0.0))
+summary(reg_top_true1_mist)
+reg_top_true1_mist <- lm(applied_to_top_true_fin ~ factor(treatment),data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true < 0.01))
+summary(reg_top_true1_mist)
+reg_top_true1 <- lm(applied_to_top_true_fin ~ factor(treatment),data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true1)
+reg_top_true1_aggr <- lm(applied_to_top_true_int ~ factor(treatment),data=dof %>% subset(open==1 & prob_ratex_top_true > 0.0))
+summary(reg_top_true1_aggr)
+reg_top_true1_aggr <- lm(applied_to_top_true_fin ~ factor(agg_treatment),data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true1_aggr)
+reg_top_true1_aggr <- lm(applied_to_top_true_fin ~ factor(treatment),data=dof %>% subset(open==1 & applied_to_top_true_int==0 & prob_ratex_top_true > 0.0))
+summary(reg_top_true1_aggr)
+reg_top_true1_aggr <- lm(applied_to_top_true_fin ~ factor(treatment)+applied_to_top_true_int,data=dof %>% subset(open==1 & inconsistent_type==0 & prob_ratex_top_true > 0.0))
+summary(reg_top_true1_aggr)
+reg_top_true1_aggr <- lm(applied_to_top_true_fin ~ factor(treatment),data=dof %>% subset(open==1 & applied_to_top_true_int==0 & inconsistent_type==0 & prob_ratex_top_true > 0.0))
+summary(reg_top_true1_aggr)
+reg_top_true1_aggr <- lm(applied_to_top_true_fin_in_top_pref ~ factor(treatment),data=dof %>% subset(open==1 & prob_ratex_top_true > 0.0 & applied_to_top_true_int_in_top_pref==0))
+summary(reg_top_true1_aggr)
+reg_top_true1_aggr <- lm(applied_to_top_true_fin_in_top_pref ~ factor(treatment),data=dof %>% subset(open==1 & prob_ratex_top_true > 0.0 & applied_to_top_true_int_in_top_pref==0 & inconsistent_type==0))
+summary(reg_top_true1_aggr)
+reg_top_true1_aggr <- lm(applied_to_top_true_fin_in_top_pref ~ factor(treatment)+applied_to_top_true_int_in_top_pref,data=dof %>% subset(open==1 & inconsistent_type==0 & prob_ratex_top_true > 0.0))
+summary(reg_top_true1_aggr)
+reg_top_true1_aggr <- lm(applied_to_top_true_fin ~ factor(treatment),data=dof %>% subset(open==1 & applied_to_top_true_int==0 & prob_ratex_top_true > 0.0 & inconsistent_type==0))
+summary(reg_top_true1_aggr)
+reg_top_true1_aggr <- lm(applied_to_top_true_fin ~ factor(treatment),data=dof %>% subset(open==1))
+summary(reg_top_true1_aggr)
+reg_top_true <- glm(applied_to_top_true_fin ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true)
+reg_top_true_aggr <- glm(applied_to_top_true_fin ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true_aggr)
+reg_top_true1rst_aggr <- glm(applied_to_top_true_fin_in_top_pref ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true1rst_aggr)
+reg_top_true1rst <- glm(applied_to_top_true_fin_in_top_pref ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true < 0.01))
+summary(reg_top_true1rst_aggr)
+reg_top_true <- glm(not_applied_to_top_true_fin_in_top_pref ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true)
+reg_top_true <- glm(not_applied_to_top_true_fin ~ factor(treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_top_true)
+reg_top_true <- glm(applied_to_top_true_fin_in_top_pref ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true = 0.0))
+summary(reg_top_true)
+reg_top_true <- glm(applied_to_top_true_fin_in_top_pref ~ factor(treatment), family="binomial", data=dof %>% subset(open==1 & prob_ratex_top_true > 0.0))
+summary(reg_top_true)
+reg_top_true <- glm(applied_to_top_true_fin_in_top_pref ~ factor(treatment), family="binomial", data=dof %>% subset(open==1 & prob_ratex_top_true > 0.0))
+summary(reg_top_true)
+reg_top_true1_mist_aggr <- lm(applied_to_top_true_int_in_top_pref ~ factor(treatment),data=dof %>% subset(open==1))
+summary(reg_top_true1_mist_aggr)
+reg_top_true1_mist_aggr <- lm(applied_to_top_true_int_in_top_pref ~ factor(treatment),data=dof %>% subset(open==1 & prob_ratex_top_true > 0.0))
+summary(reg_top_true1_mist_aggr)
+
+#NEW - Consistent:
+reg_top_true1_mist_aggr <- lm(applied_to_top_true_fin ~ factor(agg_treatment),data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true = 0.0))
+summary(reg_top_true1_mist_aggr)
+reg_top_true1_mist <- lm(applied_to_top_true_fin ~ factor(treatment),data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true = 0.0))
+summary(reg_top_true1_mist)
+reg_top_true1_mist <- lm(applied_to_top_true_fin ~ factor(treatment),data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true < 0.01))
+summary(reg_top_true1_mist)
+reg_top_true1 <- lm(applied_to_top_true_fin ~ factor(treatment),data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true1)
+reg_top_true1 <- glm(applied_to_top_true_fin ~ factor(treatment), family = "binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true1)
+reg_top_true1_aggr <- lm(applied_to_top_true_fin ~ factor(agg_treatment),data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true1_aggr)
+reg_top_true <- glm(applied_to_top_true_fin ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true)
+reg_top_true_aggr <- glm(applied_to_top_true_fin ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true_aggr)
+reg_top_true1rst_aggr <- glm(applied_to_top_true_fin_in_top_pref ~ factor(agg_treatment), family="binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true1rst_aggr)
+reg_top_true1rst <- glm(applied_to_top_true_fin_in_top_pref ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true < 0.01))
+summary(reg_top_true1rst_aggr)
+reg_top_true <- glm(not_applied_to_top_true_fin_in_top_pref ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true)
+
+reg_over_confidence <- glm(risk_ratex_dec ~ factor(treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(risk_ratex_dec ~ factor(treatment), data=dof %>% subset(open==1))
+summary(reg_over_confidence)
+#Trying other filtering, NEW:
+reg_over_confidence <- glm(risk_ratex_dec ~ factor(treatment), family="binomial", data=dof %>% subset(open==1 & overall_prob_ratex_int<1.00))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(risk_ratex_dec ~ factor(agg_treatment), data=dof %>% subset(open==1  & overall_prob_ratex_int<1.00))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(risk_ratex_dec ~ factor(treatment), data=dof %>% subset(open==1  & overall_prob_ratex_int<1.00))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(risk_ratex_dec ~ factor(treatment), data=dof %>% subset(open==1  & overall_prob_ratex_int>0.00 & overall_prob_ratex_int<1.00))
+summary(reg_over_confidence)
+reg_over_confidence_aggr <- lm(risk_ratex_dec ~ factor(agg_treatment), data=dof %>% subset(open==1  & overall_prob_ratex_int>0.00 & overall_prob_ratex_int<1.00))
+summary(reg_over_confidence_aggr)
+#Same but removing overall_prob_ratex_int>0.00, instead filter on score>450.
+reg_over_confidence <- lm(risk_ratex_dec ~ factor(agg_treatment), data=dof %>% subset(open==1  & prom_cm_above_450==1))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(risk_ratex_dec ~ factor(treatment), data=dof %>% subset(open==1  & prom_cm_above_450==1))
+summary(reg_over_confidence)
+reg_over_confidence <- glm(risk_ratex_dec ~ factor(treatment), family="binomial", data=dof %>% subset(open==1  & prom_cm_above_450==1))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(risk_ratex_dec ~ factor(treatment), data=dof %>% subset(open==1  & prom_cm_above_450==1 & overall_prob_ratex_int<1.00))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_int ~ factor(treatment), data=dof %>% subset(open==1  & prom_cm_above_450==1))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(risk_ratex_inc ~ factor(treatment), data=dof %>% subset(open==1  & prom_cm_above_450==1 & overall_prob_ratex_int>0.00))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(risk_ratex_dec ~ factor(agg_treatment), data=dof %>% subset(open==1  & prom_cm_above_450==1 & overall_prob_ratex_int<1.00))
+summary(reg_over_confidence)
+#8% of the students decrease their risk in the C group. T3 increases this share by 2.8points.
+
+reg_over_confidence_aggr <- lm(overall_prob_ratex_int ~ factor(treatment), data=dof %>% subset(open==1))
+summary(reg_over_confidence_aggr)
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(treatment), data=dof %>% subset(open==1  & changed==1 &  overall_prob_ratex_int==0.00))
+summary(reg_over_confidence_aggr)
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(treatment), data=dof %>% subset(open==1  & changed==1 &  overall_prob_ratex_int<0.01))
+summary(reg_over_confidence_aggr)
+#use the 450 threshold
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(agg_treatment), data=dof %>% subset(open==1  & changed==1 &  overall_prob_ratex_int<0.01))
+summary(reg_over_confidence_aggr)
+#Same but removing overall_prob_ratex_int>0.00, instead filter on score>450.
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(treatment), data=dof %>% subset(open==1  & changed==1 &  overall_prob_ratex_int==0.00 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr)
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(treatment), data=dof %>% subset(open==1  & changed==1 &  overall_prob_ratex_int<0.01 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr)
+#use the 450 threshold
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(treatment), data=dof %>% subset(open==1  &  overall_prob_ratex_int<0.01 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr)
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(agg_treatment), data=dof %>% subset(open==1  &  overall_prob_ratex_int<0.01 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr)
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(agg_treatment), data=dof %>% subset(open==1  &  overall_prob_ratex_int<0.99 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr)
+#Students with very low initial proba of being admitted significantly decreases the risk of the ROL in the final stage: students in the C group on average increases the overall probability of being admitted by 6 points in the final ROL vs interim. Compared to this baseline, students in T2 increases their overall probability of being admitted by 2.6points more, and students in T3 by 3.2 points more.
+#Note that here, it is important to aggregate to get significant results.
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(treatment), data=dof %>% subset(open==1  &  overall_prob_ratex_int<1.00 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr)
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(treatment), data=dof %>% subset(open==1 &  overall_prob_ratex_int<=0.99 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr)
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(treatment), data=dof %>% subset(overall_prob_ratex_int<0.10 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr) #we get results when not conditioning on open...
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(treatment), data=dof %>% subset(open==1 &  overall_prob_ratex_int<0.10 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr)
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(treatment), data=dof %>% subset(open==1 &  general_message==2 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr)
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(treatment), data=dof %>% subset(general_message==2 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr) #Same: result when we do not condition on opening
+reg_over_confidence_aggr <- lm(change_ratex ~ factor(agg_treatment), data=dof %>% subset(open==1 &  general_message==2 & prom_cm_above_450==1 ))
+summary(reg_over_confidence_aggr)
+#Very similar, and strong result, when restricting to students in general_message==2
+#Again, only there when we aggregate.
+
+#TODO: CHECK THIS!
+reg_over_confidence <- glm(risk_ratex_dec ~ factor(treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_over_confidence)
+reg_over_confidence <- glm(risk_ratex_inc ~ factor(treatment), family="binomial", data=dof %>% subset(open==1))
+summary(reg_over_confidence)
+ #NEW
+ reg_over_confidence <- lm(risk_ratex_inc ~ factor(treatment), data=dof %>% subset(open==1 &          overall_prob_ratex_int>0.00))
+ summary(reg_over_confidence)
+  reg_over_confidence <- lm(risk_ratex_inc ~ factor(agg_treatment), data=dof %>% subset(open==1 &          overall_prob_ratex_int>0.00))
+ summary(reg_over_confidence)
+
+
+#Combining treatments 2 and 3 to get more power
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment_combined), data=dof %>% subset(open==1) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1))
+summary(reg_over_confidence)
+
+#Including covariates
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms, data=dof %>% subset(open==1) %>%  filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1 & strata_region != 4))
+summary(reg_over_confidence)
+
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment_combined) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms, data=dof %>% subset(open==1) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1 & strata_region != 4))
+summary(reg_over_confidence)
+
+
+stargazer(reg_changed, reg_inc, reg_dec, reg_ent, reg_lft, reg_st_ass, reg_pr_ass, keep.stat="n",
+          add.lines = list(c(2,round(exp(coef(reg_changed))[2],3), round(exp(coef(reg_inc))[2],3), round(exp(coef(reg_dec))[2],3), round(exp(coef(reg_ent))[2],3), round(exp(coef(reg_lft))[2],3),  round(exp(coef(reg_st_ass))[2],3), round(exp(coef(reg_pr_ass))[2],3)),
+                           c(3,round(exp(coef(reg_changed))[3],3), round(exp(coef(reg_inc))[3],3), round(exp(coef(reg_dec))[3],3), round(exp(coef(reg_ent))[3],3), round(exp(coef(reg_lft))[3],3), round(exp(coef(reg_st_ass))[3],3), round(exp(coef(reg_pr_ass))[3],3)),
+                           c(4,round(exp(coef(reg_changed))[4],3), round(exp(coef(reg_inc))[4],3), round(exp(coef(reg_dec))[4],3), round(exp(coef(reg_ent))[4],3), round(exp(coef(reg_lft))[4],3), round(exp(coef(reg_st_ass))[4],3), round(exp(coef(reg_pr_ass))[2],3))), digits=3,
+                         out = paste(path_draft_tables,"regs_odds_open.tex", sep=""))
+
+#TODO: this table has to be pasted by hand in the paper. It is easy though.
+```
+
+
+### Aggregate statistics by group and message type
+```{r}
+# kable(dof %>% group_by(treatment, open, general_message) %>% dplyr::summarise(n=n(), c=mean(changed)*100,  inc = mean(increased_valid)*100, dec = mean(decreased_valid)*100, as = mean(assigned_oficial)*100, ent=mean(entered)*100, lef=mean(left)*100, cs=mean(changed_status_ass)*100, cp=mean(changed_program_ass)*100), digits=3)
+
+# kable(dof %>% group_by(treatment, open, general_message) %>% dplyr::summarise(n=n(), c=sd(changed),  inc = sd(increased_valid), dec = sd(decreased_valid), as = sd(assigned_oficial), ent=sd(entered), lef=sd(left), cs=sd(changed_status_ass), cp=sd(changed_program_ass)), digits=3)
+
+#Create Latex table by hand
+table_summary_stats_by_group = dof %>% group_by(treatment_label, open_label, general_message) %>%
+dplyr::summarise(n   = n(),
+                 c   = round(mean(changed)*100,3),
+                 inc = round(mean(increased_valid)*100,3),
+                 dec = round(mean(decreased_valid)*100,3),
+                 as = round(mean(assigned_oficial)*100,3),
+                 ent = round(mean(entered)*100,3),
+                 lef = round(mean(left)*100,3),
+                 cs  = round(mean(changed_status_ass)*100,3),
+                 cp  = round(mean(changed_program_ass)*100,3))
+table_summary_stats_by_group
+
+table_summary_stats_by_group_stderr = dof %>% group_by(treatment_label, open_label, general_message) %>%
+  dplyr::summarise(n   = n(),
+                   c   = round(100*sd(changed)/sqrt(n()), 3),
+                   inc = round(100*sd(increased_valid)/sqrt(n()), 3),
+                   dec = round(100*sd(decreased_valid)/sqrt(n()), 3),
+                   as = round(100*sd(assigned_oficial)/sqrt(n()), 3),
+                   ent = round(100*sd(entered)/sqrt(n()), 3),
+                   lef = round(100*sd(left)/sqrt(n()), 3),
+                   cs  = round(100*sd(changed_status_ass)/sqrt(n()), 3),
+                   cp  = round(100*sd(changed_program_ass)/sqrt(n()), 3))
+table_summary_stats_by_group_stderr
+
+#Write latex table by hand
+table_latex_file = file(paste(path_draft_tables,"stats_by_treatment_and_open_and_message.tex", sep=""))
+table_header = c("\\begin{table}[H]",
+                 "\\caption{Summary Statistics by Treatment, Reception and Message Group}",
+                 "\\label{tab:table_treatment_stats_by_open_and_message}",
+                 "\\centerline{\\scalebox{0.6}{",
+                 "\\begin{tabular}{lcccccccccccc}",
+                 "\\toprule",
+                 "& & & & \\multicolumn{3}{c}{Application} & \\multicolumn{5}{c}{Assignment} \\\\",
+                 "\\cmidrule(lr){5-7}\\cmidrule(lr){8-12}")
+table_columns = paste("Treatment",
+                      "\\makecell*[c]{Open}",
+                      "\\makecell*[c]{Group}",
+                      "\\(N\\)",
+                      "Modified [\\%]",
+                      "\\makecell*[c]{Increased [\\%]}",
+                      "\\makecell*[c]{Decreased [\\%]}",
+                      "Assigned [\\%]",
+                      "Entered [\\%]",
+                      "Left [\\%]",
+                      "\\makecell*[c]{Changed  \\\\ status [\\%]}",
+                      "\\makecell*[c]{Changed  \\\\ program [\\%]}",
+                      sep = " & ")
+table_body = paste(table_columns, "\\\\" ," \\midrule")
+
+space = '\\\\[0pt]'
+table_stats = table_summary_stats_by_group
+table_sterr_stats = table_summary_stats_by_group_stderr
+#Fill table body
+ct = 0
+for(i in 1:nrow(table_stats)){
+  ct = ct + 1
+  row = c()
+  for(j in 1:ncol(table_stats)){
+    row_stat = table_stats[i,j]
+    if((j == 1 | j == 2) & ct != 2){
+      row_stat = ""
+    }
+    if(j == 1){
+      row = row_stat
+    }
+    else{
+      row = paste(row, "&", row_stat)
+    }
+  }
+  row = paste(row, space)
+  table_body = c(table_body, row)
+  # Paste row for standard errors
+  row = c()
+  for(j in 1:ncol(table_sterr_stats)){
+    row_stat = table_sterr_stats[i,j]
+    if(j != 1){
+      if(j == 2 | j == 3 | j == 4){
+        row = paste(row, "&", "")
+      }else{
+        row = paste(row, "&", paste("(",row_stat,")",sep=""))
+      }
+    }
+  }
+  row = paste(row, space)
+  table_body = c(table_body, row)
+  #Include midrules
+  if(i%%3==0){
+    table_body = c(table_body, "\\midrule")
+    ct = 0
+  }
+}
+
+table_footer = c("\\end{tabular}",
+                 "}}",
+                 "{\\scriptsize Note: Opened is a binary variable equal to 1 if the student opened the personalized website, 0 otherwise. Modified is a binary variable equal to 1 if the student modified its application after the personalized websites were sent, 0 otherwise. Increased (decreased) is a binary variable equal to 1 if the student increased (decreased) the number of valid applications in their list, 0 otherwise. Assigned is a binary variable equal to 1 if the student resulted assigned at the end of the process, 0 otherwise. Entered (left) is a binary variable equal to 1 if the student resulted unassigned (assigned) given their list of preferences before the intervention and (un)assigned  given their preferenes after the intervention, 0 otherwise. Changed status (program) is a binary variable equal to 1 if the student changed their status (program) of assignment considering the list of preferences submitted before and after the intervention. Standard errors reported in parenthesis.}",
+                 "\\end{table}")
+table_latex_code = c(table_header, table_body, table_footer)
+writeLines(table_latex_code, table_latex_file)
+close(table_latex_file)
+```
+
+## Regressions and Odd-ratios among openers in Safety group
+```{r}
+reg_changed <- glm(changed ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 2))
+summary(reg_changed)
+
+reg_inc <- lm(increased_valid ~ factor(agg_treatment), data=dof %>% subset(open==1) %>% filter(general_message == 2))
+summary(reg_inc)
+reg_inc <- glm(increased_valid ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 2))
+summary(reg_inc)
+
+reg_dec <- glm(decreased_valid ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 2))
+summary(reg_dec)
+
+reg_pr_ass <- glm(changed_program_ass ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 2))
+summary(reg_pr_ass)
+
+reg_st_ass <- glm(changed_status_ass ~ factor(treatment), family="binomial", data=dof %>% subset(open==1)  %>% filter(general_message == 2))
+summary(reg_st_ass)
+
+reg_ent <- glm(entered ~ factor(treatment), family="binomial", data=dof %>% subset(open==1)  %>% filter(general_message == 2))
+summary(reg_ent)
+#NEW
+reg_ent <- lm(entered ~ factor(agg_treatment), data=dof %>% subset(open==1 & assigned_int==0)  %>% filter(general_message == 2))
+summary(reg_ent)
+reg_ent <- lm(entered ~ factor(treatment), data=dof %>% subset(open==1 & assigned_int==0)  %>% filter(general_message == 2))
+summary(reg_ent)
+reg_ent <- glm(entered ~ factor(treatment), family="binomial", data=dof %>% subset(open==1 & assigned_int==0)  %>% filter(general_message == 2))
+summary(reg_ent)
+#NEW: adding score>450
+reg_ent <- lm(entered ~ factor(agg_treatment), data=dof %>% subset(open==1 & assigned_int==0 & prom_cm_above_450==1)  %>% filter(general_message == 2))
+summary(reg_ent)
+#Strong effect on entering: + 2.8pp/3.4pp from a baseline of 6%.
+reg_ent <- lm(entered ~ factor(treatment), data=dof %>% subset(open==1 & assigned_int==0 & prom_cm_above_450==1)  %>% filter(general_message == 2))
+summary(reg_ent)
+#Holds when not aggregating treatment
+reg_ent <- glm(entered ~ factor(treatment), family="binomial", data=dof %>% subset(open==1 & assigned_int==0 & prom_cm_above_450==1)  %>% filter(general_message == 2))
+summary(reg_ent)
+
+
+reg_lft <- glm(left ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 2))
+summary(reg_lft)
+
+reg_top_true <- glm(not_applied_to_top_true_fin_in_top_pref ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 2) %>% 
+                      subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true)
+
+
+
+#TODO: CHECK THIS!
+reg_over_confidence <- glm(risk_ratex_dec ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 2))
+summary(reg_over_confidence)
+reg_over_confidence <- glm(risk_ratex_inc ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 2))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment), data=dof %>% subset(open==1) %>% filter(general_message == 2))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment), data=dof %>% subset(open==1) %>% filter(general_message == 2) %>% filter(changed == 1))
+summary(reg_over_confidence)
+#NOTE: This last result would be good if we could get statistically significant results for T3
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment), data=dof %>% subset(open==1) %>% filter(general_message == 2) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1))
+summary(reg_over_confidence)
+
+#Combining treatments 2 and 3 to get more power
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment_combined), data=dof %>% subset(open==1) %>% filter(general_message == 2) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1))
+summary(reg_over_confidence)
+#NEW
+dof %<>% mutate(treat=ifelse(agg_treatment==3,2, agg_treatment))
+
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treat), data=dof %>% subset(open==1) %>% filter(general_message == 2) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treat), data=dof %>% subset(open==1) %>% filter(general_message == 2) %>% filter(changed == 1) %>% filter(valid_apps_before > 0))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treat), data=dof %>% subset(open==1) %>% filter(general_message == 2) %>% filter(changed == 1))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treat), data=dof %>% subset(open==1) %>% filter(general_message == 2) %>% filter(valid_apps_before > 0) %>% filter(changed == 1))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treat), data=dof %>% subset(open==1 & general_message == 2 & valid_apps_before!=0))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treat), data=dof %>% subset(open==1 & general_message == 2 & changed == 1)) 
+summary(reg_over_confidence)                         
+
+#Including covariates
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms, data=dof %>% subset(open==1) %>% filter(general_message == 2) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1 & strata_region != 4))
+summary(reg_over_confidence)
+
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment_combined) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms, data=dof %>% subset(open==1) %>% filter(general_message == 2) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1 & strata_region != 4))
+summary(reg_over_confidence)
+
+# Adding more controls
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ overall_prob_ratex_int + factor(treatment) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms + factor(pumi), data = dof %>% subset(open==1) %>% filter(general_message == 2) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1 & strata_region != 4))
+summary(reg_over_confidence)
+
+reg_over_confidence <- lm(overall_prob_ratex_fin ~overall_prob_ratex_int + factor(treatment_combined) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms + factor(pumi), data = dof %>% subset(open==1) %>% filter(general_message == 2) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1 & strata_region != 4))
+summary(reg_over_confidence)
+
+
+
+
+#NEW: 
+dof %<>% mutate(overconf=ifelse(bias_in_belief_overall_ratex>0, 1,0))
+dof %<>% mutate(underconf=ifelse(bias_in_belief_overall_ratex<0, 1,0))
+bias_belief <- lm(overconf ~ factor(treatment), data=dof %>% subset(open==1 & general_message == 2) )
+summary(bias_belief)
+bias_belief <- lm(overconf ~ factor(agg_treatment), data=dof %>% subset(open==1 & general_message == 2) )
+summary(bias_belief)
+bias_belief <- lm(underconf ~ factor(treatment), data=dof %>% subset(open==1 & general_message == 2) )
+summary(bias_belief)
+bias_belief <- lm(underconf ~ factor(agg_treatment), data=dof %>% subset(open==1 & general_message == 2) )
+summary(bias_belief)
+bias_belief <- lm(overconf ~ factor(treatment), data=dof %>% subset(open==1 & general_message == 1) )
+summary(bias_belief)
+bias_belief <- lm(overconf ~ factor(agg_treatment), data=dof %>% subset(open==1 & general_message == 1) )
+summary(bias_belief)
+bias_belief <- lm(underconf ~ factor(treatment), data=dof %>% subset(open==1 & general_message == 1) )
+summary(bias_belief)
+bias_belief <- lm(underconf ~ factor(treat), data=dof %>% subset(open==1 & general_message == 1) )
+summary(bias_belief)
+
+#NEW
+bias_belief <- lm(abs(bias_in_belief_overall_ratex) ~ factor(treatment), data=dof %>% subset(open==1) )
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in_belief_overall_ratex) ~ factor(treatment), data=dof %>% subset(open==1) )
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in_belief_overall_ratex) ~ factor(treatment), data=dof %>% subset(open==1 & general_message == 2))
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in_belief_overall_ratex) ~ factor(treat), data=dof %>% subset(open==1 & overall_prob_ratex_int==0.00))
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in_belief_overall_ratex) ~ factor(treat), data=dof %>% subset(open==1 & overall_prob_interim_int<0.20))
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in_belief_overall_ratex) ~ factor(treatment), data=dof %>% subset(open==1 & overall_prob_interim_int<0.20))
+summary(bias_belief)
+
+#NEW:
+dof %<>% mutate(mistake_any=ifelse( valid_apps_after < apps_after, 1,0))
+any_mistake <- lm(mistake_any ~ factor(treatment), data=dof %>% subset(open==1 & valid_apps_before < apps_before))
+summary(any_mistake)
+any_mistake <- lm(mistake_any ~ factor(agg_treatment), data=dof %>% subset(open==1 & valid_apps_before < apps_before & prom_cm_above_450==1))
+summary(any_mistake)
+any_mistake <- lm(mistake_any ~ factor(treat), data=dof %>% subset(open==1 & valid_apps_before < apps_before))
+summary(any_mistake)
+dof %<>% mutate(know_mistake=ifelse(knows_adm_mistake=="Sí", 1,0))
+any_mistake <- lm(know_mistake ~ factor(treat), data=dof %>% subset(open==1 & valid_apps_before < apps_before))
+summary(any_mistake)
+
+
+
+stargazer(reg_changed, reg_inc, reg_dec, reg_ent, reg_lft,  reg_st_ass, reg_pr_ass, keep.stat="n",
+          add.lines = list(c(2,round(exp(coef(reg_changed))[2],3), round(exp(coef(reg_inc))[2],3), round(exp(coef(reg_dec))[2],3), round(exp(coef(reg_ent))[2],3), round(exp(coef(reg_lft))[2],3), round(exp(coef(reg_st_ass))[2],3), round(exp(coef(reg_pr_ass))[2],3)),
+                           c(3,round(exp(coef(reg_changed))[3],3), round(exp(coef(reg_inc))[3],3), round(exp(coef(reg_dec))[3],3), round(exp(coef(reg_ent))[3],3), round(exp(coef(reg_lft))[3],3),  round(exp(coef(reg_st_ass))[3],3), round(exp(coef(reg_pr_ass))[3],3)),
+                           c(4,round(exp(coef(reg_changed))[4],3), round(exp(coef(reg_inc))[4],3), round(exp(coef(reg_dec))[4],3), round(exp(coef(reg_ent))[4],3), round(exp(coef(reg_lft))[4],3), round(exp(coef(reg_st_ass))[4],3), round(exp(coef(reg_pr_ass))[2],3))), digits=3,
+                         out = paste(path_draft_tables,"regs_odds_open_safety.tex", sep=""))
+
+#TODO: this table has to be pasted by hand in the paper. It is easy though.
+```
+
+
+## Regressions and Odd-ratios among openers in Reach group
+```{r}
+reg_changed <- glm(changed ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 1))
+summary(reg_changed)
+
+reg_inc <- glm(increased_valid ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 1))
+summary(reg_inc)
+
+reg_dec <- glm(decreased_valid ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 1))
+summary(reg_dec)
+
+reg_pr_ass <- glm(changed_program_ass ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 1))
+summary(reg_pr_ass)
+
+reg_st_ass <- glm(changed_status_ass ~ factor(treatment), family="binomial", data=dof %>% subset(open==1)  %>% filter(general_message == 1))
+summary(reg_st_ass)
+
+reg_ent <- glm(entered ~ factor(treatment), family="binomial", data=dof %>% subset(open==1)  %>% filter(general_message == 1))
+summary(reg_ent)
+
+reg_lft <- glm(left ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 1))
+summary(reg_lft)
+
+reg_top_true <- glm(not_applied_to_top_true_fin_in_top_pref ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>%  filter(inconsistent_type != 1) %>% 
+                     filter(general_message == 1) %>%
+                      subset(prob_ratex_top_true > 0.00))
+summary(reg_top_true)
+
+reg_over_confidence <- glm(risk_ratex_dec ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 1))
+summary(reg_over_confidence)
+
+
+
+#TODO: CHECK THIS!
+reg_over_confidence <- glm(risk_ratex_dec ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 1))
+summary(reg_over_confidence)
+reg_over_confidence <- glm(risk_ratex_inc ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 1))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment), data=dof %>% subset(open==1) %>% filter(general_message == 1))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment), data=dof %>% subset(open==1) %>% filter(general_message == 1) %>% filter(changed == 1))
+summary(reg_over_confidence)
+
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment), data=dof %>% subset(open==1) %>% filter(general_message == 1) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1))
+summary(reg_over_confidence)
+
+#Combining treatments 2 and 3 to get more power
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment_combined), data=dof %>% subset(open==1) %>% filter(general_message == 1) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1))
+summary(reg_over_confidence)
+
+#Including covariates
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms, data=dof %>% subset(open==1) %>% filter(general_message == 1) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1 & strata_region != 4))
+summary(reg_over_confidence)
+
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment_combined) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms, data=dof %>% subset(open==1) %>% filter(general_message == 1) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1 & strata_region != 4))
+summary(reg_over_confidence)
+
+
+stargazer(reg_changed, reg_inc, reg_dec, reg_ent, reg_lft,  reg_st_ass, reg_pr_ass, keep.stat="n",
+          add.lines = list(c(2,round(exp(coef(reg_changed))[2],3), round(exp(coef(reg_inc))[2],3), round(exp(coef(reg_dec))[2],3), round(exp(coef(reg_ent))[2],3), round(exp(coef(reg_lft))[2],3), round(exp(coef(reg_st_ass))[2],3), round(exp(coef(reg_pr_ass))[2],3)),
+                           c(3,round(exp(coef(reg_changed))[3],3), round(exp(coef(reg_inc))[3],3), round(exp(coef(reg_dec))[3],3), round(exp(coef(reg_ent))[3],3), round(exp(coef(reg_lft))[3],3),  round(exp(coef(reg_st_ass))[3],3), round(exp(coef(reg_pr_ass))[3],3)),
+                           c(4,round(exp(coef(reg_changed))[4],3), round(exp(coef(reg_inc))[4],3), round(exp(coef(reg_dec))[4],3), round(exp(coef(reg_ent))[4],3), round(exp(coef(reg_lft))[4],3), round(exp(coef(reg_st_ass))[4],3), round(exp(coef(reg_pr_ass))[2],3))), digits=3,
+                         out = paste(path_draft_tables,"regs_odds_open_reach.tex", sep=""))
+
+#TODO: this table has to be pasted by hand in the paper. It is easy though.
+```
+
+## Regressions and Odd-ratios among openers in Explore group
+```{r}
+reg_changed <- glm(changed ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 3))
+summary(reg_changed)
+
+reg_inc <- glm(increased_valid ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 3))
+summary(reg_inc)
+
+reg_dec <- glm(decreased_valid ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 3))
+summary(reg_dec)
+
+reg_pr_ass <- glm(changed_program_ass ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 3))
+summary(reg_pr_ass)
+
+reg_st_ass <- glm(changed_status_ass ~ factor(treatment), family="binomial", data=dof %>% subset(open==1)  %>% filter(general_message == 3))
+summary(reg_st_ass)
+
+reg_ent <- glm(entered ~ factor(treatment), family="binomial", data=dof %>% subset(open==1)  %>% filter(general_message == 3))
+summary(reg_ent)
+
+reg_lft <- glm(left ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 3) %>% filter(misfit==1 & strata_region != 4))
+summary(reg_lft)
+
+reg_top_true <- glm(not_applied_to_top_true_fin_in_top_pref ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 3) %>%
+                      subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true)
+
+
+#TODO: CHECK THIS!
+#Testing
+reg_top_true <- glm(not_applied_to_top_true_fin_in_top_pref ~ overall_prob_ratex_int + factor(treatment) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms + factor(pumi), 
+                    family = "binomial",
+                    data = dof %>% subset(open==1) %>% filter(general_message == 3) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1 & strata_region != 4) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true)
+# With filter of changed = 1
+reg_top_true <- glm(not_applied_to_top_true_fin_in_top_pref ~ overall_prob_ratex_int + factor(treatment) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms + factor(pumi), 
+                    family = "binomial",
+                    data = dof %>% subset(open==1) %>% filter(general_message == 3) %>% filter(valid_apps_before > 0) %>% filter(changed == 1) %>% filter(misfit == 1 & strata_region != 4) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true)
+# With filter of changed = 0
+reg_top_true <- glm(not_applied_to_top_true_fin_in_top_pref ~ overall_prob_ratex_int + factor(treatment) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms + factor(pumi), 
+                    family = "binomial",
+                    data = dof %>% subset(open==1) %>% filter(general_message == 3) %>% filter(valid_apps_before > 0) %>% filter(changed == 0) %>% filter(misfit == 1 & strata_region != 4) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_top_true)
+
+
+
+
+#TODO: CHECK THIS!
+reg_over_confidence <- glm(risk_ratex_dec ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 3))
+summary(reg_over_confidence)
+
+
+reg_adm_mistakes <- glm(not_increased_share_mistakes  ~ factor(treatment), family="binomial", 
+                        data = dof  %>% 
+                          filter(misfit==1 & strata_region != 4) %>% 
+                          filter(valid_apps_before < apps_before) %>% 
+                          subset(open==1) %>%
+                          subset(changed == 1) %>% 
+                          filter(general_message == 3))
+summary(reg_adm_mistakes)
+
+
+reg_over_confidence <- glm(risk_ratex_dec ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 3))
+summary(reg_over_confidence)
+reg_over_confidence <- glm(risk_ratex_inc ~ factor(treatment), family="binomial", data=dof %>% subset(open==1) %>% filter(general_message == 3))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment), data=dof %>% subset(open==1) %>% filter(general_message == 3))
+summary(reg_over_confidence)
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment), data=dof %>% subset(open==1) %>% filter(general_message == 3) %>% filter(changed == 1))
+summary(reg_over_confidence)
+
+
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment), data=dof %>% subset(open==1) %>% filter(general_message == 3) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1))
+summary(reg_over_confidence)
+
+#Combining treatments 2 and 3 to get more power
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment_combined), data=dof %>% subset(open==1) %>% filter(general_message == 3) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1))
+summary(reg_over_confidence)
+
+#Including covariates
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms, data=dof %>% subset(open==1) %>% filter(general_message == 3) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1 & strata_region != 4))
+summary(reg_over_confidence)
+
+reg_over_confidence <- lm(overall_prob_ratex_fin ~ factor(treatment_combined) + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + gets_sms, data=dof %>% subset(open==1) %>% filter(general_message == 3) %>% filter(changed == 1) %>% filter(valid_apps_before > 0) %>% filter(misfit == 1 & strata_region != 4))
+summary(reg_over_confidence)
+
+
+
+#Testing 
+dof %>% filter(open == 1) %>% group_by(general_message, treatment_label) %>% summarise(mean_prob = mean(overall_prob_ratex_fin, na.rm = TRUE),
+                  n = n())
+
+
+stargazer(reg_changed, reg_inc, reg_dec, reg_ent, reg_lft,  reg_st_ass, reg_pr_ass, keep.stat="n",
+          add.lines = list(c(2,round(exp(coef(reg_changed))[2],3), round(exp(coef(reg_inc))[2],3), round(exp(coef(reg_dec))[2],3), round(exp(coef(reg_ent))[2],3), round(exp(coef(reg_lft))[2],3), round(exp(coef(reg_st_ass))[2],3), round(exp(coef(reg_pr_ass))[2],3)),
+                           c(3,round(exp(coef(reg_changed))[3],3), round(exp(coef(reg_inc))[3],3), round(exp(coef(reg_dec))[3],3), round(exp(coef(reg_ent))[3],3), round(exp(coef(reg_lft))[3],3),  round(exp(coef(reg_st_ass))[3],3), round(exp(coef(reg_pr_ass))[3],3)),
+                           c(4,round(exp(coef(reg_changed))[4],3), round(exp(coef(reg_inc))[4],3), round(exp(coef(reg_dec))[4],3), round(exp(coef(reg_ent))[4],3), round(exp(coef(reg_lft))[4],3), round(exp(coef(reg_st_ass))[4],3), round(exp(coef(reg_pr_ass))[2],3))), digits=3,
+                         out = paste(path_draft_tables,"regs_odds_open_explore.tex", sep=""))
+
+#TODO: this table has to be pasted by hand in the paper. It is easy though.
+```
+
+### Statistics by mistakers
+Note: treatments 2 and 3 add the sentence "Verifica que cumples con los requisitos" if the preference is not valid.
+
+```{r}
+#Testing
+
+#Reduction in underconfidence mistakes
+reg_underconf <- glm(not_applied_to_top_true_fin_in_top_pref ~ factor(treatment),
+                       family="binomial",
+                       data= dof %>% subset(open==1) %>% subset(prob_ratex_top_true > 0.0))
+summary(reg_underconf)
+#TODO:clean definition of top-true
+
+#Reduction in overconfidence mistakes (reduction in risk)
+reg_overconf <- glm(risk_ratex_dec ~ factor(treatment),
+                       family="binomial",
+                       data= dof %>% subset(open==1))
+summary(reg_overconf)
+
+#Testing stuff
+# Checking reduction in has bottom_true with positive prob
+d_bt_aux = dof %>% subset(open==1) %>% subset(prob_ratex_bottom_true > 0 & overall_prob_ratex_fin < 1)
+table(d_bt_aux$applied_to_bottom_true_fin, d_bt_aux$treatment)
+
+#Reduction in admissibility mistakes (reduction in share of applications which are invalid)
+reg_adm_mistakes <- glm(increased_valid ~ factor(treatment),
+                       family="binomial",
+                       data= dof %>% 
+                         subset(open==1) %>% 
+                         filter(valid_apps_before < apps_before))
+summary(reg_adm_mistakes)
+#TODO: we do not find a significant effect on admisibility mistakes perse
+# but we do regarding increasing valid applications
+
+
+
+
+
+
+#Look into bias for risk
+hist(as.numeric(dof %>% filter(overall_prob_ratex_fin < 0.01) %>% pull(prob_any_pref)))
+hist(as.numeric(dof  %>% filter(overall_prob_ratex_fin < 0.99) %>% pull(prob_any_pref)))
+hist(as.numeric(dof  %>% filter(overall_prob_ratex_fin < 0.99) %>% pull(overall_prob_ratex_fin)))
+
+#Regresion on reduction of bias in risk
+reg_risk_bias <- lm(abs(bias_in_belief_overall_ratex) ~ factor(treatment)  + factor(strata_region) + factor(strata_sexo) + factor(strata_score) + factor(general_message) + gets_sms,
+                       #family="binomial",
+                      data= dof %>% subset(open==1) %>% mutate(bias_in_belief_risk_ratex_abs_high = ifelse(abs(bias_in_belief_risk_ratex) >= 100, 1, 0)) %>%
+                      subset(overall_prob_ratex_fin < 1) %>%
+                      filter(misfit==1 & strata_region != 4))
+summary(reg_risk_bias)
+
+
+#TODO: we need to redo this analysis subsetting students who have their
+# partial portfolios contained in their final ones, and redo
+# the analysis on the bias at the program level (using bias in cutoffs maybe)
+# and only for programs in the survey that appear in both portfolios
+
+
+
+#Creating table for mistakes
+stargazer(reg_underconf, reg_overconf, keep.stat="n",
+          add.lines = list(c(2,round(exp(coef(reg_underconf))[2],3), round(exp(coef(reg_overconf))[2],3)),
+                           c(3,round(exp(coef(reg_underconf))[3],3), round(exp(coef(reg_overconf))[3],3)),
+                           c(4,round(exp(coef(reg_underconf))[4],3), round(exp(coef(reg_overconf))[4],3))), digits=3,
+                         out = paste(path_draft_tables,"regs_odds_open_strategic_mistakes.tex", sep=""))
+
+#TODO: this table has to be pasted by hand in the paper. It is easy though.
+
+
+```
+
+```{r}
+kable(dof %>% filter(valid_apps_before < apps_before) %>% group_by(treatment, open) %>% dplyr::summarise(n=n(), ent=mean(entered)*100, lef=mean(left)*100, cs=mean(changed_status_ass)*100, cp=mean(changed_program_ass)*100), digits=3)
+
+kable(dof %>% filter(valid_apps_before < apps_before) %>% group_by(treatment, open) %>% dplyr::summarise(n=n(), ent=sd(entered), lef=sd(left), cs=sd(changed_status_ass), cp=sd(changed_program_ass)), digits=3)
+
+
+#Create Latex table by hand
+table_summary_stats_by_group = dof %>% filter(valid_apps_before < apps_before) %>% group_by(treatment_label, open_label) %>%
+dplyr::summarise(n   = n(),
+                 c   = round(mean(changed)*100,3),
+                 inc = round(mean(increased_valid)*100,3),
+                 dec = round(mean(decreased_valid)*100,3),
+                 ent = round(mean(entered)*100,3),
+                 lef = round(mean(left)*100,3),
+                 cs  = round(mean(changed_status_ass)*100,3),
+                 cp  = round(mean(changed_program_ass)*100,3))
+table_summary_stats_by_group
+
+table_summary_stats_by_group_stderr = dof %>% filter(valid_apps_before < apps_before) %>% group_by(treatment_label, open_label) %>%
+  dplyr::summarise(n   = n(),
+                   c   = round(100*sd(changed)/sqrt(n()), 3),
+                   inc = round(100*sd(increased_valid)/sqrt(n()), 3),
+                   dec = round(100*sd(decreased_valid)/sqrt(n()), 3),
+                   ent = round(100*sd(entered)/sqrt(n()), 3),
+                   lef = round(100*sd(left)/sqrt(n()), 3),
+                   cs  = round(100*sd(changed_status_ass)/sqrt(n()), 3),
+                   cp  = round(100*sd(changed_program_ass)/sqrt(n()), 3))
+table_summary_stats_by_group_stderr
+
+#Write latex table by hand
+table_latex_file = file(paste(path_draft_tables,"stats_by_treatment_and_open_among_mistakers.tex", sep=""))
+table_header = c("\\begin{table}[H]",
+                 "\\caption{Summary Statistics by Treatment and Reception among Mistakers}",
+                 "\\label{tab:table_treatment_stats_by_open_among_mistakers}",
+                 "\\centerline{\\scalebox{0.7}{",
+                 "\\begin{tabular}{lcccccccccc}",
+                 "\\toprule",
+                 "  & & & \\multicolumn{3}{c}{Application} & \\multicolumn{4}{c}{Assignment} \\\\",
+                 "\\cmidrule(lr){4-6}\\cmidrule(lr){7-10}")
+table_columns = paste("Treatment",
+                      "\\makecell*[c]{Opened}",
+                      "\\(N\\)",
+                      "Modified [\\%]",
+                      "\\makecell*[c]{Increased [\\%]}",
+                      "\\makecell*[c]{Decreased [\\%]}",
+                      "Entered [\\%]",
+                      "Left [\\%]",
+                      "\\makecell*[c]{Changed  \\\\ status [\\%]}",
+                      "\\makecell*[c]{Changed  \\\\ program [\\%]}",
+                      sep = " & ")
+table_body = paste(table_columns, "\\\\" ," \\midrule")
+
+space = '\\\\[0pt]'
+table_stats = table_summary_stats_by_group
+table_sterr_stats = table_summary_stats_by_group_stderr
+#Fill table body
+for(i in 1:nrow(table_stats)){
+  row = c()
+  for(j in 1:ncol(table_stats)){
+    row_stat = table_stats[i,j]
+    if(j == 1){
+      row = row_stat
+    }
+    else{
+      row = paste(row, "&", row_stat)
+    }
+  }
+  row = paste(row, space)
+  table_body = c(table_body, row)
+  # Paste row for standard errors
+  row = c()
+  for(j in 1:ncol(table_sterr_stats)){
+    row_stat = table_sterr_stats[i,j]
+    if(j != 1){
+      if(j == 2 | j == 3){
+        row = paste(row, "&", "")
+      }else{
+        row = paste(row, "&", paste("(",row_stat,")",sep=""))
+      }
+    }
+  }
+  row = paste(row, space)
+  table_body = c(table_body, row)
+}
+
+table_footer = c("\\bottomrule",
+                 "\\end{tabular}",
+                 "}}",
+                 "{\\scriptsize Note: Opened is a binary variable equal to 1 if the student opened the personalized website, 0 otherwise. Modified is a binary variable equal to 1 if the student modified its application after the personalized websites were sent, 0 otherwise. Increased (decreased) is a binary variable equal to 1 if the student increased (decreased) the number of valid applications in their list, 0 otherwise. Entered (left) is a binary variable equal to 1 if the student resulted unassigned (assigned) given their list of preferences before the intervention and (un)assigned  given their preferenes after the intervention, 0 otherwise. Changed status (program) is a binary variable equal to 1 if the student changed their status (program) of assignment considering the list of preferences submitted before and after the intervention. Standard errors reported in parenthesis.}",
+                 "\\end{table}")
+table_latex_code = c(table_header, table_body, table_footer)
+writeLines(table_latex_code, table_latex_file)
+close(table_latex_file)
+
+
+
+```
+
+```{r}
+# Causal effects on Admissibility Mistakers
+# We can add controls to get more significant estimates
+#TODO:CHECK HOW THE MISFIT VARIABLE IS DEFINED
+
+reg_changed <- glm(changed  ~ factor(treatment), family="binomial", data = dof  %>% filter(misfit==1 & strata_region != 4) %>% filter(valid_apps_before < apps_before) %>% subset(open==1))
+summary(reg_changed)
+
+reg_inc <- glm(increased_valid  ~ factor(treatment), family="binomial", data = dof  %>% filter(misfit==1 & strata_region != 4) %>% filter(valid_apps_before < apps_before) %>% subset(open==1))
+summary(reg_inc)
+
+reg_dec <- glm(decreased_valid  ~ factor(treatment), family="binomial", data = dof  %>% filter(misfit==1 & strata_region != 4) %>% filter(valid_apps_before < apps_before) %>% subset(open==1))
+summary(reg_dec)
+
+reg_pr_ass <- glm(changed_program_ass ~ factor(treatment), family="binomial", data = dof  %>% filter(misfit==1 & strata_region != 4) %>% filter(valid_apps_before < apps_before) %>% subset(open==1))
+summary(reg_pr_ass)
+
+reg_st_ass <- glm(changed_status_ass ~ factor(treatment), family="binomial", data = dof  %>% filter(misfit==1 & strata_region != 4) %>% filter(valid_apps_before < apps_before) %>% subset(open==1))
+summary(reg_st_ass)
+
+reg_ent <- glm(entered  ~ factor(treatment), family="binomial", data = dof  %>% 
+                 filter(misfit==1 & strata_region != 4) %>% 
+                 filter(valid_apps_before < apps_before) %>% subset(open==1))
+summary(reg_ent)
+
+reg_lft <- glm(left  ~ factor(treatment), family="binomial", data = dof  %>% filter(misfit==1 & strata_region != 4) %>% filter(valid_apps_before < apps_before) %>% subset(open==1))
+summary(reg_lft)
+
+
+reg_adm_mistakes <- glm(reduced_share_mistakes  ~ factor(treatment), family="binomial", 
+                        data = dof  %>% 
+                          filter(misfit==1 & strata_region != 4) %>% 
+                          filter(valid_apps_before < apps_before) %>% 
+                          subset(open==1) %>%
+                          subset(changed == 1))
+summary(reg_adm_mistakes)
+
+
+
+
+
+stargazer(reg_changed, reg_inc, reg_dec, reg_ent, reg_lft,  reg_st_ass, reg_pr_ass, keep.stat="n",
+          add.lines = list(c(2,round(exp(coef(reg_changed))[2],3), round(exp(coef(reg_inc))[2],3), round(exp(coef(reg_dec))[2],3), round(exp(coef(reg_ent))[2],3), round(exp(coef(reg_lft))[2],3), round(exp(coef(reg_st_ass))[2],3), round(exp(coef(reg_pr_ass))[2],3)),
+                           c(3,round(exp(coef(reg_changed))[3],3), round(exp(coef(reg_inc))[3],3), round(exp(coef(reg_dec))[3],3), round(exp(coef(reg_ent))[3],3), round(exp(coef(reg_lft))[3],3), round(exp(coef(reg_st_ass))[3],3), round(exp(coef(reg_pr_ass))[3],3)),
+                           c(4,round(exp(coef(reg_changed))[4],3), round(exp(coef(reg_inc))[4],3), round(exp(coef(reg_dec))[4],3), round(exp(coef(reg_ent))[4],3), round(exp(coef(reg_lft))[4],3), round(exp(coef(reg_st_ass))[2],3), round(exp(coef(reg_pr_ass))[4],3))), digits=3,
+                         out = paste(path_draft_tables,"regs_odds_open_among_adm_mistakers.tex", sep=""))
+
+#TODO: this table has to be pasted by hand in the paper. It is easy though.
+```
+
+##Test Knowledge of weights
+Creation of the variables
+```{r}
+#Dummies for whether the programs of the survey were in the interim list
+
+#was top reported final in the interim list?
+dof %<>% mutate(toprep_in_int= ifelse(codigo_carrera_1_fin==codigo_carrera_1_int | codigo_carrera_1_fin==codigo_carrera_2_int | codigo_carrera_1_fin==codigo_carrera_3_int
+ | codigo_carrera_1_fin==codigo_carrera_4_int | codigo_carrera_1_fin==codigo_carrera_5_int | codigo_carrera_1_fin==codigo_carrera_6_int | codigo_carrera_1_fin==codigo_carrera_7_int | codigo_carrera_1_fin==codigo_carrera_8_int | codigo_carrera_1_fin==codigo_carrera_9_int | codigo_carrera_1_fin==codigo_carrera_10_int, 1, 0))
+
+#was bottomreported true final in the interim list?
+#first need to create a variable with the bottom reported:
+dof %<>% mutate(bottomrep_fin= ifelse(apps_after==1, codigo_carrera_1_fin,
+                                      ifelse(apps_after==2, codigo_carrera_2_fin, ifelse(apps_after==3, codigo_carrera_3_fin, ifelse(apps_after==4, codigo_carrera_4_fin, ifelse(apps_after==5,codigo_carrera_5_fin, ifelse(apps_after==6, codigo_carrera_6_fin, ifelse(apps_after==7, codigo_carrera_7_fin, ifelse(apps_after==8, codigo_carrera_8_fin, ifelse(apps_after==9, codigo_carrera_9_fin, ifelse(apps_after==10, codigo_carrera_10_fin, NA)))))))))))
+
+dof %<>% mutate(bottomrep_in_int= ifelse(bottomrep_fin==codigo_carrera_1_int | bottomrep_fin==codigo_carrera_2_int | bottomrep_fin==codigo_carrera_3_int
+ | bottomrep_fin==codigo_carrera_4_int | bottomrep_fin==codigo_carrera_5_int | bottomrep_fin==codigo_carrera_6_int | bottomrep_fin==codigo_carrera_7_int | bottomrep_fin==codigo_carrera_8_int | bottomrep_fin==codigo_carrera_9_int | bottomrep_fin==codigo_carrera_10_int, 1, 0))
+
+#was top true in the interim list?
+dof %<>% mutate(toptrue_in_int= ifelse(codigo_carrera_top_true==codigo_carrera_1_int | codigo_carrera_top_true==codigo_carrera_2_int | codigo_carrera_top_true==codigo_carrera_3_int
+ | codigo_carrera_top_true==codigo_carrera_4_int | codigo_carrera_top_true==codigo_carrera_5_int | codigo_carrera_top_true==codigo_carrera_6_int | codigo_carrera_top_true==codigo_carrera_7_int | codigo_carrera_top_true==codigo_carrera_8_int | codigo_carrera_top_true==codigo_carrera_9_int | codigo_carrera_top_true==codigo_carrera_10_int, 1, 0))
+
+#was bottom true in the interim list?
+dof %<>% mutate(bottomtrue_in_int= ifelse(codigo_carrera_bottom_true==codigo_carrera_1_int | codigo_carrera_bottom_true==codigo_carrera_2_int | codigo_carrera_bottom_true==codigo_carrera_3_int
+ | codigo_carrera_bottom_true==codigo_carrera_4_int | codigo_carrera_bottom_true==codigo_carrera_5_int | codigo_carrera_bottom_true==codigo_carrera_6_int | codigo_carrera_bottom_true==codigo_carrera_7_int | codigo_carrera_bottom_true==codigo_carrera_8_int | codigo_carrera_bottom_true==codigo_carrera_9_int | codigo_carrera_bottom_true==codigo_carrera_10_int, 1, 0))
+
+#New: Requisitos de admisión, selectividad de los programas o ponderaciones
+dof %<>% mutate(informed1 = ifelse((QID128_1=="Completamente informada/o" | QID128_1=="Bastante informada/o") & QID128_1!="NA", 1,0))
+dof %<>% mutate(fullyinformed1 = ifelse(QID128_1=="Completamente informada/o" & QID128_1!="NA",1,0))
+dof %<>% mutate(noinformed1 = ifelse(QID128_1=="No creo estar informada/o" & QID128_1!="NA",1,0))
+dof %<>% mutate(informed2 = ifelse((QID128_2=="Completamente informada/o" | QID128_2=="Bastante informada/o" | QID128_2=="Medianamente Informada/o" ) & QID128_2!="NA", 1,0))
+dof %<>% mutate(fullyinformed2 = ifelse(QID128_2=="Completamente informada/o" & QID128_2!="NA",1,0))
+dof %<>% mutate(noinformed2 = ifelse(QID128_2=="No creo estar informada/o" & QID128_2!="NA",1,0))
+dof %<>% mutate(informed3 = ifelse((QID128_3=="Completamente informada/o" | QID128_3=="Bastante informada/o") & QID128_3!="NA", 1,0))
+dof %<>% mutate(fullyinformed3 = ifelse(QID128_3=="Completamente informada/o" & QID128_3!="NA",1,0))
+dof %<>% mutate(noinformed3 = ifelse(QID128_3=="No creo estar informada/o" & QID128_3!="NA",1,0))
+dof %<>% mutate(informed4 = ifelse((QID128_4=="Completamente informada/o" | QID128_4=="Bastante informada/o") & QID128_4!="NA", 1,0))
+dof %<>% mutate(fullyinformed4 = ifelse(QID128_4=="Completamente informada/o" & QID128_4!="NA",1,0))
+dof %<>% mutate(noinformed4 = ifelse(QID128_4=="No creo estar informada/o" & QID128_4!="NA",1,0))
+dof %<>% mutate(informed5 = ifelse((QID128_5=="Completamente informada/o" | QID128_5=="Bastante informada/o") & QID128_5!="NA", 1,0))
+dof %<>% mutate(fullyinformed5 = ifelse(QID128_5=="Completamente informada/o" & QID128_5!="NA",1,0))
+dof %<>% mutate(noinformed5 = ifelse(QID128_5=="No creo estar informada/o" & QID128_5!="NA",1,0))
+dof %<>% mutate(nber_answerinfo =  rowSums(!is.na(cbind(QID128_1, QID128_2, QID128_3, QID128_4, QID128_5))))
+dof %<>% mutate(index_info = ifelse((QID128_1!="NA" | QID128_2!="NA" | QID128_3!="NA" | QID128_4!="NA" | QID128_5!="NA"), rowSums(cbind(informed1, informed2, informed3, informed4, informed5), na.rm = TRUE)/nber_answerinfo, NA))
+
+dof %<>% mutate(info_est1 = ifelse((QID134_1=="Completamente informada/o" | QID134_1=="Bastante informada/o") & QID134_1!="NA", 1,0))
+dof %<>% mutate(fullinfo_est1 = ifelse(QID134_2=="Completamente informada/o"& QID134_2!="NA", 1,0))
+dof %<>% mutate(info_est2 = ifelse((QID134_2=="Completamente informada/o" | QID134_2=="Bastante informada/o") & QID134_2!="NA", 1,0))
+dof %<>% mutate(fullinfo_est2 = ifelse(QID134_2=="Completamente informada/o"& QID134_2!="NA", 1,0))
+dof %<>% mutate(info_est3 = ifelse((QID134_3=="Completamente informada/o" | QID134_3=="Bastante informada/o") & QID134_3!="NA", 1,0))
+dof %<>% mutate(fullinfo_est3 = ifelse(QID134_3=="Completamente informada/o"& QID134_3!="NA", 1,0))
+dof %<>% mutate(info_est4 = ifelse((QID134_4=="Completamente informada/o" | QID134_4=="Bastante informada/o") & QID134_4!="NA", 1,0))
+dof %<>% mutate(fullinfo_est4 = ifelse(QID134_4=="Completamente informada/o"& QID134_4!="NA", 1,0))
+dof %<>% mutate(info_est5 = ifelse((QID134_5=="Completamente informada/o" | QID134_5=="Bastante informada/o") & QID134_5!="NA", 1,0))
+dof %<>% mutate(fullinfo_est5 = ifelse(QID134_5=="Completamente informada/o"& QID134_5!="NA", 1,0))
+
+
+dof %<>% mutate(info_ingres1 = ifelse((QID135_1=="Completamente informada/o" | QID135_1=="Bastante informada/o") & QID135_1!="NA", 1,0))
+dof %<>% mutate(fullinfo_ingres1 = ifelse(QID135_1=="Completamente informada/o"& QID135_1!="NA", 1,0))
+dof %<>% mutate(info_ingres2 = ifelse((QID135_2=="Completamente informada/o" | QID135_2=="Bastante informada/o") & QID135_2!="NA", 1,0))
+dof %<>% mutate(fullinfo_ingres2 = ifelse(QID135_2=="Completamente informada/o"& QID135_2!="NA", 1,0))
+dof %<>% mutate(info_ingres3 = ifelse((QID135_3=="Completamente informada/o" | QID135_3=="Bastante informada/o") & QID135_3!="NA", 1,0))
+dof %<>% mutate(fullinfo_ingres3 = ifelse(QID135_3=="Completamente informada/o"& QID135_3!="NA", 1,0))
+dof %<>% mutate(info_ingres4 = ifelse((QID135_4=="Completamente informada/o" | QID135_4=="Bastante informada/o") & QID135_4!="NA", 1,0))
+dof %<>% mutate(fullinfo_ingres4 = ifelse(QID135_4=="Completamente informada/o"& QID135_4!="NA", 1,0))
+dof %<>% mutate(info_ingres5 = ifelse((QID135_5=="Completamente informada/o" | QID135_5=="Bastante informada/o") & QID135_5!="NA", 1,0))
+dof %<>% mutate(fullinfo_ingres5 = ifelse(QID135_5=="Completamente informada/o"& QID135_5!="NA", 1,0))
+
+
+```
+
+
+Regressions:
+```{r}
+
+info_select1 <- lm(informed1 ~ factor(treatment), data=dof %>% subset(open==1 & toprep_in_int==1))
+summary(info_select1)
+info_select2 <- lm(informed2 ~ factor(treatment), data=dof %>% subset(open==1 & bottomrep_in_int==1))
+summary(info_select2)
+info_select3 <- lm(informed3 ~ factor(treatment), data=dof %>% subset(open==1 & toptrue_in_int==1)) #T3 decreases by 7 points...
+summary(info_select3)
+info_select5 <- lm(informed5 ~ factor(treatment), data=dof %>% subset(open==1))
+summary(info_select5)
+info_select1 <- lm(fullyinformed1 ~ factor(treatment), data=dof %>% subset(open==1 & toprep_in_int==1))
+summary(info_select1)
+info_select2 <- lm(fullyinformed2 ~ factor(treatment), data=dof %>% subset(open==1 & bottomrep_in_int==1)) ##T3 increases by 2 points
+summary(info_select2)
+info_select2 <- lm(fullyinformed2 ~ factor(treat), data=dof %>% subset(open==1 & bottomrep_in_int==1)) ##T3 increases by 2 points
+summary(info_select2)
+info_select3 <- lm(fullyinformed3 ~ factor(treatment), data=dof %>% subset(open==1 & toptrue_in_int==1))
+summary(info_select3)
+info_select4 <- lm(fullyinformed4 ~ factor(treatment), data=dof %>% subset(open==1 & bottomtrue_in_int==1))
+summary(info_select4)
+info_select5 <- lm(fullyinformed5 ~ factor(treatment), data=dof %>% subset(open==1)) ##T3 increases this by 1 point
+summary(info_select5)
+info_select1 <- lm(noinformed1 ~ factor(treatment), data=dof %>% subset(open==1 & toprep_in_int==1))
+summary(info_select1)
+info_select2 <- lm(noinformed2 ~ factor(treatment), data=dof %>% subset(open==1 & bottomrep_in_int==1))
+summary(info_select2)
+info_select3 <- lm(noinformed3 ~ factor(treatment), data=dof %>% subset(open==1 & toptrue_in_int==1))
+summary(info_select3)
+info_select4 <- lm(noinformed4 ~ factor(treatment), data=dof %>% subset(open==1 & bottomtrue_in_int==1))
+summary(info_select4)
+info_select5 <- lm(noinformed5 ~ factor(treatment), data=dof %>% subset(open==1))
+summary(info_select5)
+info_select5 <- lm(index_info ~ factor(treatment), data=dof %>% subset(open==1))
+summary(info_select5)
+
+
+
+
+info_select1 <- lm(info_est1 ~ factor(treatment), data=dof %>% subset(open==1 & toprep_in_int==1)) #T2 decreases by 2 points
+summary(info_select1)
+info_select2 <- lm(info_est2 ~ factor(treatment), data=dof %>% subset(open==1 & bottomrep_in_int==1))
+summary(info_select2)
+info_select3 <- lm(info_est3 ~ factor(treatment), data=dof %>% subset(open==1 & toptrue_in_int==1)) ##T3 decreases by 11points...
+summary(info_select3)                                                                               ##Could that students realize how 
+                                                                                                    ##uninformed they are with T3?
+info_select4 <- lm(info_est4 ~ factor(treatment), data=dof %>% subset(open==1 & bottomtrue_in_int==1))
+summary(info_select4)
+info_select5 <- lm(info_est5 ~ factor(treatment), data=dof %>% subset(open==1))
+summary(info_select5)
+info_select1 <- lm(fullinfo_est1 ~ factor(treatment), data=dof %>% subset(open==1 & toprep_in_int==1))
+summary(info_select1)
+info_select2 <- lm(fullinfo_est2 ~ factor(treatment), data=dof %>% subset(open==1 & bottomrep_in_int==1))
+summary(info_select2)
+info_select3 <- lm(fullinfo_est3 ~ factor(treatment), data=dof %>% subset(open==1 & toptrue_in_int==1))
+summary(info_select3)
+info_select4 <- lm(fullinfo_est4 ~ factor(treatment), data=dof %>% subset(open==1 & bottomtrue_in_int==1))
+summary(info_select4)
+info_select5 <- lm(fullinfo_est5 ~ factor(treatment), data=dof %>% subset(open==1))
+summary(info_select5)
+
+
+info_select1 <- lm(info_ingres1 ~ factor(treatment), data=dof %>% subset(open==1 & toprep_in_int==1)) #T2 decreases by 3 points
+summary(info_select1)
+info_select2 <- lm(info_ingres2 ~ factor(treatment), data=dof %>% subset(open==1 & bottomrep_in_int==1)) #T2 decreases by 3 points
+summary(info_select2)
+info_select3 <- lm(info_ingres3 ~ factor(treatment), data=dof %>% subset(open==1 & toptrue_in_int==1)) #T2 decreases by 9 points
+summary(info_select3)
+info_select4 <- lm(info_ingres4 ~ factor(treatment), data=dof %>% subset(open==1 & bottomtrue_in_int==1))
+summary(info_select4)
+info_select5 <- lm(info_ingres5 ~ factor(treatment), data=dof %>% subset(open==1))
+summary(info_select5)
+info_select1 <- lm(fullinfo_ingres1 ~ factor(treatment), data=dof %>% subset(open==1 & toprep_in_int==1))
+summary(info_select1)
+info_select2 <- lm(fullinfo_ingres2 ~ factor(treatment), data=dof %>% subset(open==1 & bottomrep_in_int==1))
+summary(info_select2)
+info_select3 <- lm(fullinfo_ingres3 ~ factor(treatment), data=dof %>% subset(open==1 & toptrue_in_int==1))
+summary(info_select3)
+info_select4 <- lm(fullinfo_ingres4 ~ factor(treatment), data=dof %>% subset(open==1 & bottomtrue_in_int==1))
+summary(info_select4)
+info_select5 <- lm(fullinfo_ingres5 ~ factor(treatment), data=dof %>% subset(open==1))
+summary(info_select5)
+
+```
+Changes in beliefs over cutoffs:
+```{r}
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, num_admitted, min_score, VACANTES_REG) %>%
+               mutate(min_score = ifelse(num_admitted < VACANTES_REG, 210.0, min_score)) %>%
+               dplyr::rename(min_score_toprep = min_score), by.x="codigo_carrera_1_fin", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, min_score) %>%
+                  dplyr::rename(min_score_toprep_test = min_score), by.x="codigo_carrera_1_fin", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, num_admitted, min_score, VACANTES_REG) %>%
+               mutate(min_score = ifelse(num_admitted < VACANTES_REG, 210.0, min_score)) %>%
+               dplyr::rename(min_score_bottomrep= min_score), by.x="bottomrep_fin", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+dof <- merge(dof, car %>% dplyr::select(min_score, CODIGO_DEMRE) %>%
+               dplyr::rename(min_score_bottomrep_test = min_score), by.x="bottomrep_fin", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, num_admitted, min_score, VACANTES_REG) %>%
+               dplyr::rename(min_score_top_true_test = min_score), by.x="codigo_carrera_top_true", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, min_score) %>%
+               dplyr::rename(min_score_bottom_true_test = min_score), by.x="codigo_carrera_bottom_true", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+#TODO: check whether this is the right file for the 2021 cutoffs
+prev_cutoff <- read.csv(paste(dropbox_dir, "/Mistakes Structural/Data/2022/outputs/first_last_full_with_bea_2020_2021.csv", sep=''), header=TRUE, sep=",")
+
+
+dof %<>% mutate(cbias_toprep = min_score_toprep_test - as.double(cutoff_top_reported))
+dof %<>% mutate(cbias_bottomrep = min_score_bottomrep_test -as.double(cutoff_bottom_reported))
+dof %<>% mutate(cbias_toptrue = min_score_top_true_test-as.double(cutoff_top_true))
+dof %<>% mutate(cbias_bottomtrue = min_score_bottom_true_test-as.double(cutoff_bottom_true))
+
+dof %<>% mutate(overconf_toprep = ifelse(((min_score_toprep_test - as.double(cutoff_top_reported))>0), 1,0 ))
+dof %<>% mutate(overconf_bottomprep = ifelse(((min_score_bottomrep_test - as.double(cutoff_bottom_reported))>0), 1,0 ))
+dof %<>% mutate(overconf_toptrue = ifelse(((min_score_top_true_test - as.double(cutoff_top_true))>0), 1,0 ))
+dof %<>% mutate(overconf_bottomtrue = ifelse(((min_score_bottom_true_test - as.double(cutoff_bottom_true))>0), 1,0 ))
+
+dof %<>% mutate(underconf_toprep = ifelse(((min_score_toprep_test - as.double(cutoff_top_reported))<0) , 1,0))
+dof %<>% mutate(underconf_bottomprep = ifelse(((min_score_bottomrep_test - as.double(cutoff_bottom_reported))<0), 1,0 ))
+dof %<>% mutate(underconf_toptrue = ifelse(((min_score_top_true_test - as.double(cutoff_top_true))<0), 1,0 ))
+dof %<>% mutate(underconf_bottomtrue = ifelse(((min_score_bottom_true_test - as.double(cutoff_bottom_true))<0), 1,0 ))
+
+#Put them all together, average bias by student:
+dof %<>% mutate(cbias_mean=(rowSums(cbind(cbias_toprep,cbias_bottomrep,cbias_toptrue,cbias_bottomtrue), na.rm=TRUE))/(rowSums(cbind(as.double(!is.na(cutoff_top_reported)), as.double(!is.na(cutoff_bottom_reported)), as.double(!is.na(cutoff_top_true)), as.double(!is.na(cutoff_bottom_true))), na.rm=TRUE)))
+dof %<>% mutate(cbias_mean = ifelse((is.na(cutoff_top_reported)==TRUE & is.na(cutoff_bottom_reported)==TRUE & is.na(cutoff_top_true)==TRUE & is.na(cutoff_bottom_true)==TRUE), NA, cbias_mean))
+
+library(matrixStats)
+dof %<>% mutate(cbias_max= rowMaxs(cbind(abs(cbias_toprep),abs(cbias_bottomrep),abs(cbias_toptrue),abs(cbias_bottomtrue)), na.rm=TRUE))
+dof %<>% mutate(cbias_max = ifelse((is.na(cutoff_top_reported)==TRUE & is.na(cutoff_bottom_reported)==TRUE & is.na(cutoff_top_true)==TRUE & is.na(cutoff_bottom_true)==TRUE), NA, cbias_max))
+
+#2021 cutoffs
+dof <- merge(dof, prev_cutoff %>% dplyr::select(codigo_carrera, cutoff_reg_2021) %>%
+                  dplyr::rename(cutoff2021_toprep = cutoff_reg_2021), by.x="codigo_carrera_1_fin", by.y="codigo_carrera", all.x=TRUE)
+dof <- merge(dof, prev_cutoff %>% dplyr::select(codigo_carrera, cutoff_reg_2021) %>%
+                  dplyr::rename(cutoff2021_bottomrep = cutoff_reg_2021), by.x="bottomrep_fin", by.y="codigo_carrera", all.x=TRUE)
+dof <- merge(dof, prev_cutoff %>% dplyr::select(codigo_carrera, cutoff_reg_2021) %>%
+                  dplyr::rename(cutoff2021_toptrue = cutoff_reg_2021), by.x="codigo_carrera_top_true", by.y="codigo_carrera", all.x=TRUE)
+dof <- merge(dof, prev_cutoff %>% dplyr::select(codigo_carrera, cutoff_reg_2021) %>%
+                  dplyr::rename(cutoff2021_bottomtrue = cutoff_reg_2021), by.x="codigo_carrera_bottom_true", by.y="codigo_carrera", all.x=TRUE)
+
+
+dof %<>% mutate(c2021bias_toprep = (cutoff2021_toprep/100) - as.double(cutoff_prev_top_reported))
+dof %<>% mutate(c2021bias_bottomrep = (cutoff2021_bottomrep/100) -as.double(cutoff_prev_bottom_reported))
+dof %<>% mutate(c2021bias_toptrue = (cutoff2021_toptrue/100)-as.double(cutoff_prev_top_true))
+dof %<>% mutate(c2021bias_bottomtrue = (cutoff2021_bottomtrue/100)-as.double(cutoff_prev_bottom_true))
+dof %<>% mutate(c2021bias_mean=(rowSums(cbind(c2021bias_toprep,c2021bias_bottomrep,c2021bias_toptrue,c2021bias_bottomtrue), na.rm=TRUE))/(rowSums(cbind(as.double(!is.na(cutoff_prev_top_reported)), as.double(!is.na(cutoff_prev_bottom_reported)), as.double(!is.na(cutoff_prev_top_true)), as.double(!is.na(cutoff_prev_bottom_true))), na.rm=TRUE)))
+dof %<>% mutate(c2021bias_mean = ifelse((is.na(cutoff_prev_top_reported)==TRUE & is.na(cutoff_prev_bottom_reported)==TRUE & is.na(cutoff_prev_top_true)==TRUE & is.na(cutoff_prev_bottom_true)==TRUE), NA, cbias_mean))
+
+
+dof %<>% mutate(overconf_c2021_toprep = ifelse((c2021bias_toprep>0), 1,0 ))
+dof %<>% mutate(overconf_c2021_bottomrep = ifelse((c2021bias_bottomrep>0), 1,0 ))
+dof %<>% mutate(overconf_c2021_toptrue = ifelse((c2021bias_toptrue>0), 1,0 ))
+dof %<>% mutate(overconf_c2021_bottomtrue = ifelse((c2021bias_bottomtrue>0), 1,0 ))
+dof %<>% mutate(underconf_c2021_toprep = ifelse((c2021bias_toprep<0), 1,0 ))
+dof %<>% mutate(underconf_c2021_bottomrep = ifelse((c2021bias_bottomrep<0), 1,0 ))
+dof %<>% mutate(underconf_c2021_toptrue = ifelse((c2021bias_toptrue<0), 1,0 ))
+dof %<>% mutate(underconf_c2021_bottomtrue = ifelse((c2021bias_bottomtrue<0), 1,0 ))
+
+
+#beliefs w.r.t adaptive proba
+dof %<>% mutate(abias_toprep= as.numeric(prob_top_reported) - prob_adaptive_1_fin*100)
+
+dof %<>% mutate(prob_adaptive_bottomrepfin= ifelse(apps_after==1, prob_adaptive_1_fin,
+                                      ifelse(apps_after==2, prob_adaptive_2_fin, ifelse(apps_after==3, prob_adaptive_3_fin, ifelse(apps_after==4, prob_adaptive_4_fin, ifelse(apps_after==5,prob_adaptive_5_fin, ifelse(apps_after==6, prob_adaptive_6_fin, ifelse(apps_after==7, prob_adaptive_7_fin, ifelse(apps_after==8, prob_adaptive_8_fin, ifelse(apps_after==9, prob_adaptive_9_fin, ifelse(apps_after==10, prob_adaptive_10_fin, NA)))))))))))
+dof %<>% mutate(abias_bottomrep= as.numeric(prob_bottom_reported) - prob_adaptive_bottomrepfin*100)
+dof %<>% mutate(abias_toptrue = as.numeric(prob_top_true) - prob_adaptive_top_true*100)
+dof %<>% mutate(abias_bottomtrue= as.numeric(prob_bottom_true) - prob_adaptive_bottom_true*100)
+
+#beliefs w.r.t ratex proba
+dof %<>% mutate(rbias_toprep= as.numeric(prob_top_reported) - prob_ratex_1_fin*100)
+
+dof %<>% mutate(prob_ratex_bottomrepfin= ifelse(apps_after==1, prob_ratex_1_fin,
+                                      ifelse(apps_after==2, prob_ratex_2_fin, ifelse(apps_after==3, prob_ratex_3_fin, ifelse(apps_after==4, prob_ratex_4_fin, ifelse(apps_after==5,prob_ratex_5_fin, ifelse(apps_after==6, prob_ratex_6_fin, ifelse(apps_after==7, prob_ratex_7_fin, ifelse(apps_after==8, prob_ratex_8_fin, ifelse(apps_after==9, prob_ratex_9_fin, ifelse(apps_after==10, prob_ratex_10_fin, NA)))))))))))
+dof %<>% mutate(rbias_bottomrep= as.numeric(prob_bottom_reported) - prob_ratex_bottomrepfin*100)
+dof %<>% mutate(rbias_toptrue = as.numeric(prob_top_true) - prob_ratex_top_true*100)
+dof %<>% mutate(rbias_bottomtrue= as.numeric(prob_bottom_true) - prob_ratex_bottom_true*100)
+dof %<>% mutate(overconf_ratex_toprep= ifelse((as.numeric(prob_top_reported) - prob_ratex_1_fin*100)>0, 1,0))
+dof %<>% mutate(overconf_ratex_bottomrep= ifelse((as.numeric(prob_bottom_reported) - prob_ratex_bottomrepfin*100)>0, 1,0))
+dof %<>% mutate(overconf_ratex_toptrue= ifelse((as.numeric(prob_top_true) - prob_ratex_top_true*100)>0, 1,0))
+dof %<>% mutate(overconf_ratex_bottomtrue= ifelse((as.numeric(prob_bottom_true) - prob_ratex_bottom_true*100)>0, 1,0))
+```
+
+```{r}
+#regressions:
+ bias_cutoff_toprep <- lm(formula = overconf_toprep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toprep_in_int == 1))
+ summary(bias_cutoff_toprep)
+ bias_cutoff_toprep <- lm(formula = overconf_bottomprep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomrep_in_int == 1))
+ summary(bias_cutoff_toprep)
+ bias_cutoff_toprep <- lm(formula = overconf_toptrue ~ factor(treatment), data = dof %>% #we have an increase in the share of overconfident
+                      subset(open == 1 & toptrue_in_int == 1))
+ summary(bias_cutoff_toprep)
+ bias_cutoff_toprep <- lm(formula = overconf_bottomtrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomtrue_in_int == 1))
+ summary(bias_cutoff_toprep)
+ 
+ #regressions:
+ bias_cutoff_toprep <- lm(formula = underconf_toprep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toprep_in_int == 1))
+ summary(bias_cutoff_toprep)
+ bias_cutoff_toprep <- lm(formula = underconf_bottomprep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomrep_in_int == 1))
+ summary(bias_cutoff_toprep)
+ bias_cutoff_toprep <- lm(formula = underconf_toptrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toptrue_in_int == 1))
+ summary(bias_cutoff_toprep) #...and thus a miroring decrease in the share of underconfident, but not for students in general message==2
+ bias_cutoff_toprep <- lm(formula = underconf_toptrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toptrue_in_int == 1 & general_message==2))
+ summary(bias_cutoff_toprep)
+ bias_cutoff_toprep <- lm(formula = underconf_bottomtrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomtrue_in_int == 1))
+ summary(bias_cutoff_toprep)
+ 
+#absolute bias in cutoffs
+ bias_cutoff_bottomrep <- lm(formula = abs(cbias_toprep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(cbias_toprep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toprep_in_int==1))
+ summary(bias_cutoff_bottomrep)
+   dof %<>% mutate(dist_cutofftoprep = puntpond_1_fin/100 - min_score_toprep_test)
+  bias_cutoff_bottomrep <- lm(formula = abs(cbias_toprep) ~ factor(treatment) + abs(dist_cutofftoprep) +factor(treatment) *abs(dist_cutofftoprep), data = dof %>% 
+                      subset(open == 1 & toprep_in_int==1))
+ summary(bias_cutoff_bottomrep)
+bias_cutoff_bottomrep <- lm(formula = abs(cbias_toprep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toprep_in_int==1 & overconf_toprep==1))
+ summary(bias_cutoff_bottomrep)
+   bias_cutoff_bottomrep <- lm(formula = abs(cbias_toprep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toprep_in_int==1 & underconf_toprep==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(cbias_bottomrep) ~ factor(treatment), data = dof %>%  #T2 and T3 brings a decrease in bias in
+                                                                                                 #absolute value 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep) 
+ bias_cutoff_bottomrep <- lm(formula = abs(cbias_bottomrep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomrep_in_int == 1))
+ summary(bias_cutoff_bottomrep) #T2 and T3 brings a decrease in bias in absolute value 
+ggplot(data=dof %>% subset((treatment==1 | treatment==2) & bottomrep_in_int==1) , aes(x=cbias_bottomrep, group=factor(treatment), fill=factor(treatment))) +
+geom_density(adjust=1.5, alpha=.4)
+ggplot(data=dof %>% subset((treatment==1 | treatment==2) & bottomrep_in_int==1) , aes(x=abs(cbias_bottomrep), group=factor(treatment), fill=factor(treatment))) +
+geom_density(adjust=1.5, alpha=.4)
+ggplot(data=dof %>% subset((treatment==1 | treatment==3) & bottomrep_in_int==1) , aes(x=cbias_bottomrep, group=factor(treatment), fill=factor(treatment))) +
+geom_density(adjust=1.5, alpha=.4)
+mean(dof[dof$treatment==1 & dof$bottomrep_in_int==1,]$cbias_bottomrep, na.rm = TRUE)
+mean(dof[dof$treatment==3 & dof$bottomrep_in_int==1,]$cbias_bottomrep, na.rm = TRUE)
+
+bias_cutoff_bottomrep <- lm(formula = abs(cbias_bottomrep) ~ factor(treatment), data = dof %>%  #T2 decreases bias for overconf students
+                      subset(open == 1 & bottomrep_in_int == 1 & overconf_bottomprep==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(cbias_bottomrep) ~ factor(treatment), data = dof %>%  #T2 and T3 decreases bias for underconf
+                                                                                                 #students
+                      subset(open == 1 & bottomrep_in_int == 1 & underconf_bottomprep==1))
+ summary(bias_cutoff_bottomrep) 
+ bias_cutoff_bottomrep <- lm(formula = abs(cbias_toptrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)                                                                   #T4 increases bias
+ bias_cutoff_bottomrep <- lm(formula = abs(cbias_toptrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toptrue_in_int == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(cbias_bottomtrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(cbias_bottomtrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomtrue_in_int == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(cbias_mean) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(cbias_max) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ 
+ 
+#absolute bias in 2021 cutoffs
+ bias_cutoff_bottomrep <- lm(formula = abs(c2021bias_toprep) ~ factor(treatment), data = dof %>%   #T4 increases bias
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(c2021bias_toprep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toprep_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(c2021bias_bottomrep) ~ factor(treatment), data = dof %>% #T3 decreases bias, p=0.08  
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)  #T3 brings a decrease in bias in absolute value 
+ bias_cutoff_bottomrep <- lm(formula = abs(c2021bias_bottomrep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomrep_in_int == 1))
+ summary(bias_cutoff_bottomrep) #T2 and T3 brings a decrease in bias in absolute value 
+  bias_cutoff_bottomrep <- lm(formula = abs(c2021bias_bottomrep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomrep_in_int == 1 & overconf_c2021_bottomrep==1))
+ summary(bias_cutoff_bottomrep) 
+  bias_cutoff_bottomrep <- lm(formula = abs(c2021bias_bottomrep) ~ factor(treatment), data = dof %>% #effect from uncerconf.
+                      subset(open == 1 & bottomrep_in_int == 1 & underconf_c2021_bottomrep==1))
+ summary(bias_cutoff_bottomrep) 
+ bias_cutoff_bottomrep <- lm(formula = abs(c2021bias_toptrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep) 
+ bias_cutoff_bottomrep <- lm(formula = abs(c2021bias_toptrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toptrue_in_int == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(c2021bias_bottomtrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(c2021bias_bottomtrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomtrue_in_int == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(c2021bias_mean) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ 
+ 
+ bias_cutoff_bottomrep <- lm(formula = overconf_c2021_toprep ~ factor(treatment), data = dof %>% #T3 decreases share overconf by 5points
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_c2021_toprep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toprep_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_c2021_bottomrep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep) 
+ bias_cutoff_bottomrep <- lm(formula = overconf_c2021_bottomrep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomrep_in_int == 1))
+ summary(bias_cutoff_bottomrep) 
+ bias_cutoff_bottomrep <- lm(formula = overconf_c2021_toptrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_c2021_toptrue ~ factor(treatment), data = dof %>%  #T3 increases share overconf by 9points
+                      subset(open == 1 & toptrue_in_int == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_c2021_bottomtrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_c2021_bottomtrue ~ factor(treatment), data = dof %>% #only 28 students
+                      subset(open == 1 & bottomtrue_in_int == 1))
+ summary(bias_cutoff_bottomrep)
+ 
+ bias_cutoff_bottomrep <- lm(formula = underconf_c2021_toprep ~ factor(treatment), data = dof %>%  #and thus T3 increases share underconf
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = underconf_c2021_toprep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toprep_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = underconf_c2021_bottomrep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)  #T3 brings a decrease in bias in absolute value 
+ bias_cutoff_bottomrep <- lm(formula = underconf_c2021_bottomrep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomrep_in_int == 1))
+ summary(bias_cutoff_bottomrep) #T2 and T3 brings a decrease in bias in absolute value 
+ bias_cutoff_bottomrep <- lm(formula = underconf_c2021_toptrue ~ factor(treatment), data = dof %>%  #T2 and T3 decrease share underconf
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep) #T4 increases bias
+ bias_cutoff_bottomrep <- lm(formula = underconf_c2021_toptrue ~ factor(treatment), data = dof %>% #T2 decreases share underconf
+                      subset(open == 1 & toptrue_in_int == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = underconf_c2021_bottomtrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = underconf_c2021_bottomtrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomtrue_in_int == 1))
+ summary(bias_cutoff_bottomrep)
+ 
+ #Adaptive bias
+ bias_cutoff_bottomrep <- lm(formula = abs(abias_toprep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(abias_toprep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toprep_in_int==1))
+ summary(bias_cutoff_bottomrep)
+bias_cutoff_bottomrep <- lm(formula = abs(abias_bottomrep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(abias_bottomrep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomrep_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(abias_toptrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(abias_toptrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toptrue_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(abias_bottomtrue) ~ factor(treatment), data = dof %>%  #decrease in the bias of bottom true from T3
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(abias_bottomtrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomtrue_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ 
+ 
+ #Bias w.r.t ratex beliefs
+ bias_cutoff_bottomrep <- lm(formula = abs(rbias_toprep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(rbias_toprep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toprep_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(rbias_bottomrep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(rbias_bottomrep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomrep_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(rbias_bottomrep) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomrep_in_int==1 & overconf_ratex_bottomrep==1))
+ summary(bias_cutoff_bottomrep)
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(rbias_bottomrep) ~ factor(treatment), data = dof %>% #decreases in bias
+                      subset(open == 1 & bottomrep_in_int==1 & overconf_ratex_bottomrep==0))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(rbias_toptrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(rbias_toptrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toptrue_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(rbias_bottomtrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = abs(rbias_bottomtrue) ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomtrue_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ 
+ 
+ 
+ #Overconf w.r.t ratex beliefs
+ bias_cutoff_bottomrep <- lm(formula = overconf_ratex_toprep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_ratex_toprep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toprep_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_ratex_bottomrep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_ratex_bottomrep ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomrep_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_ratex_toptrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_ratex_toptrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & toptrue_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_ratex_bottomtrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1))
+ summary(bias_cutoff_bottomrep)
+ bias_cutoff_bottomrep <- lm(formula = overconf_ratex_toptrue ~ factor(treatment), data = dof %>% 
+                      subset(open == 1 & bottomtrue_in_int==1))
+ summary(bias_cutoff_bottomrep)
+ 
+
+#beliefs proba 
+bias_belief <- lm(abs(bias_in_belief_ratex_top_true) ~ factor(treatment), data=dof %>% subset(open==1 & toptrue_in_int==1) )
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in_belief_ratex_top_true) ~ factor(treatment), data=dof %>% subset(open==1 & general_message == 2 & toptrue_in_int==1))
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in_belief_ratex_top_true) ~ factor(treatment), data=dof %>% subset(open==1 & overall_prob_ratex_int==0.00 & toptrue_in_int==1))
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in_belief_ratex_top_true) ~ factor(treatment), data=dof %>% subset(open==1 & prob_ratex_top_true==0.00))
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in) ~ factor(treatment), data=dof %>% subset(open==1 & toptrue_in_int==1) )
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in_belief_ratex_top_true) ~ factor(treatment), data=dof %>% subset(open==1 & general_message == 2 & toptrue_in_int==1))
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in_belief_ratex_top_true) ~ factor(treatment), data=dof %>% subset(open==1 & overall_prob_ratex_int==0.00 & toptrue_in_int==1))
+summary(bias_belief)
+bias_belief <- lm(abs(bias_in_belief_ratex_top_true) ~ factor(treatment), data=dof %>% subset(open==1 & prob_ratex_top_true==0.00))
+summary(bias_belief)
+```
+
+## IV analysis for the effect of opening the email
+```{r}
+library(ivpack)
+```
+
+
+```{r}
+fs <- lm(open ~ gets_sms, data=df)
+summary(fs)
+stargazer(fs, out = paste(path_draft_tables,"fs.tex", sep=""))
+
+iv_changed <- ivreg(changed ~ open | gets_sms, data=dof)
+iv_inc <- ivreg(increased_valid ~ open | gets_sms, data=dof)
+iv_dec <- ivreg(decreased_valid ~ open | gets_sms, data=dof)
+
+iv_pr_ass <- ivreg(changed_program_ass ~ open | gets_sms, data=dof)
+iv_st_ass <- ivreg(changed_status_ass  ~ open | gets_sms, data=dof)
+iv_ent <- ivreg(entered ~ open | gets_sms, data=dof)
+iv_lft <- ivreg(left ~ open | gets_sms, data=dof)
+
+stargazer(iv_changed, iv_inc, iv_dec, iv_ent, iv_lft, iv_pr_ass, iv_st_ass, keep.stat="n", out = paste(path_draft_tables,"iv_regs.tex", sep=""))
+```
+
+```{r}
+iv_changed <- ivreg(changed ~ open | gets_sms, data=dof %>% subset(treatment==3))
+iv_inc <- ivreg(increased ~ open | gets_sms, data=dof %>% subset(treatment==3))
+iv_dec <- ivreg(decreased ~ open | gets_sms, data=dof %>% subset(treatment==3))
+
+iv_pr_ass <- ivreg(changed_program_ass ~ open | gets_sms, data=dof %>% subset(treatment==3))
+iv_st_ass <- ivreg(changed_status_ass  ~ open | gets_sms, data=dof %>% subset(treatment==3))
+iv_ent <- ivreg(entered ~ open | gets_sms, data=dof %>% subset(treatment==3))
+iv_lft <- ivreg(left ~ open | gets_sms, data=dof %>% subset(treatment==3))
+
+stargazer(iv_changed, iv_inc, iv_dec, iv_ent, iv_lft, iv_pr_ass, iv_st_ass, keep.stat="n", out = paste(path_draft_tables,"iv_regs_subset.tex", sep=""))
+```
+
+
+
+## Robustness checks
+## Balance in assignment to treatments
+
+```{r}
+#TODO: Check if this is updated in the text
+library(nnet)
+m <- multinom(factor(treatment) ~ factor(strata_region) + factor(strata_sexo) + factor(strata_score) + factor(general_message) + gets_sms + open_cartilla, data = ms %>% filter(strata_region != 4))
+
+mf <- multinom(factor(treatment) ~ factor(strata_region) + factor(strata_sexo) + factor(strata_score) + factor(general_message) + gets_sms + open_cartilla, data = ms %>% filter(misfit==1 & strata_region != 4))
+
+summary(m)
+
+stargazer(m, mf, out = paste(path_draft_tables,"regs_balance.tex", sep=""))
+```
+
+```{r}
+#TODO:CHECK HOW THE MISFIT VARIABLE IS DEFINED
+ms %>% filter(misfit == 1) %>% nrow()
+```
+
+
+Excluding misfits
+```{r}
+#TODO:CHECK HOW THE MISFIT VARIABLE IS DEFINED
+m <- polr(factor(treatment) ~ factor(strata_region) + factor(strata_sexo) + factor(strata_score) + factor(general_message) + gets_sms + open_cartilla, data = ms %>% filter(misfit == 0), Hess=TRUE)
+## store table
+(ctable <- coef(summary(m)))
+
+p <- pnorm(abs(ctable[, "t value"]), lower.tail = FALSE) * 2
+
+## combined table
+(ctable <- cbind(ctable, "p value" = p))
+```
+
+ 

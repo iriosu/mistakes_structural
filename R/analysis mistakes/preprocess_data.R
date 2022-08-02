@@ -1,9 +1,13 @@
 # Swithing and dropout regressions and odds ratios test if iriosu can make
 # changes
 rm(list = ls())
+
 # Libraries ---------------------------------------------------------------
 
 dropbox_dir = "~/Dropbox/"
+input_path = paste(dropbox_dir, 'Dropout_matching/',sep='')
+setwd(paste(dropbox_dir, "Dropout/Code/R", sep=''))
+
 
 library(parallel)
 library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)

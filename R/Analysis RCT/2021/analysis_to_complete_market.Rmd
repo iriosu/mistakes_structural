@@ -1,0 +1,581 @@
+---
+title: "Analysis"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+---
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(rddtools)
+library(parallel)
+library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(knitr) 
+library(kableExtra)
+```
+
+```{r}
+dropbox_dir = "~/Dropbox/"
+
+students19 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2019/A_INSCRITOS_PUNTAJES_PSU_2019_PUB_MRUN.csv", sep=';', header=TRUE)
+applications19 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2019/C_POSTULANTES_SELECCION_PSU_2019_PUB_MRUN.csv", sep=';', header=TRUE)
+
+students20 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2020/A_INSCRITOS_PUNTAJES_PSU_2020_PUB_MRUN.csv", sep=';', header=TRUE)
+applications20 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2020/C_POSTULANTES_SELECCION_PSU_2020_PUB_MRUN.csv", sep=';', header=TRUE)
+```
+
+
+```{r}
+applications19$applied = 1
+applications20$applied = 1
+applications19 %<>% mutate(assigned = (ESTADO_PREF_01 == 24) + (ESTADO_PREF_02 == 24) + (ESTADO_PREF_03 == 24) + (ESTADO_PREF_04 == 24) + (ESTADO_PREF_05 == 24) + 
+                                      (ESTADO_PREF_06 == 24) + (ESTADO_PREF_07 == 24) + (ESTADO_PREF_08 == 24) + (ESTADO_PREF_09 == 24) + (ESTADO_PREF_10 == 24) )
+applications20 %<>% mutate(assigned = (ESTADO_PREF_01 == 24) + (ESTADO_PREF_02 == 24) + (ESTADO_PREF_03 == 24) + (ESTADO_PREF_04 == 24) + (ESTADO_PREF_05 == 24) + 
+                                      (ESTADO_PREF_06 == 24) + (ESTADO_PREF_07 == 24) + (ESTADO_PREF_08 == 24) + (ESTADO_PREF_09 == 24) + (ESTADO_PREF_10 == 24) )
+```
+
+
+```{r}
+students19 <- merge(students19, applications19[,c("MRUN", "applied", "assigned")], by='MRUN', all.x=TRUE)
+students19$applied[is.na(students19$applied)] <- 0
+students19$assigned[is.na(students19$assigned)] <- 0
+students20 <- merge(students20, applications20[,c("MRUN", "applied", "assigned")], by='MRUN', all.x=TRUE)
+students20$applied[is.na(students20$applied)] <- 0
+students20$assigned[is.na(students20$assigned)] <- 0
+```
+
+```{r}
+students19 %>% group_by(assigned) %>% tally()
+students20 %>% group_by(assigned) %>% tally()
+124451/(124451+181601)
+116047/(116047+192488)
+```
+
+
+```{r}
+students19$PROMLM_ACTUAL <- as.numeric(students19$PROMLM_ACTUAL)
+students19$PROMLM_ANTERIOR <- as.numeric(students19$PROMLM_ANTERIOR)
+students20$PROMLM_ACTUAL <- as.numeric(students20$PROMLM_ACTUAL)
+students20$PROMLM_ANTERIOR <- as.numeric(students20$PROMLM_ANTERIOR)
+```
+
+```{r}
+kable(
+  rbind(students19 %>% filter(  pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) < 450 ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n() ),
+        students19 %>% filter(  pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) >= 450 & pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) < 600 ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n() ),
+        students19 %>% filter(  pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) >= 600  ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n() )
+    ), digits=3
+)
+
+```
+
+```{r}
+kable(
+  rbind(students20 %>% filter(  pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) < 450 ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n() ),
+        students20 %>% filter(  pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) >= 450 & pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) < 600 ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n() ),
+        students20 %>% filter(  pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) >= 600  ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n() )
+    ), digits=3
+)
+```
+
+```{r}
+students21 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/official/adm2021_archivo_C_demre_2021feb08_MRUN_Compartir.csv", sep=';', header=TRUE)
+bea <- read.csv('/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/15-01-21_Preseleccionados_BEA_DEMRE_MRUN.csv', sep=';', header=TRUE)
+inscritos21 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/official/Inscritos_final_febrero_MRUN_Compartir.csv", sep=';', header=TRUE)
+applications21 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/Reporte_diario_postulaciones_final_mrun.csv", sep=',', header=TRUE)
+```
+
+```{r}
+applications21$applied = 1
+students21 <- merge(students21, applications21[,c("mrun", "applied")], by='mrun', all.x=TRUE)
+```
+
+```{r}
+students21$applied[is.na(students21$applied)] <- 0
+
+students21$promedio_cm_actual <- as.numeric(students21$promedio_cm_actual)
+students21$promedio_lm_anterior <- as.numeric(students21$promedio_lm_anterior)
+```
+
+
+
+```{r}
+kable(
+  rbind(
+    students21 %>% filter( pmax(promedio_cm_actual, promedio_lm_anterior) < 450 ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n()),
+    students21 %>% filter( pmax(promedio_cm_actual, promedio_lm_anterior)  >= 450 & pmax(promedio_cm_actual, promedio_lm_anterior) < 600  ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n()),
+    students21 %>% filter( pmax(promedio_cm_actual, promedio_lm_anterior) >= 600  ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n())   
+  ), digits=3
+)
+```
+
+# Targets
+Among students < 450: 19.16%
+Among students >= 450 and < 600: 53.65%
+Among students >= 450 and < 600: 84.83%
+```{r}
+low  = 0.5*(0.2229+0.160355) 
+mid = 0.5*(0.647234+0.4259) 
+high = 0.5*(0.8788501+0.8177859) 
+```
+
+```{r}
+c(low, mid, high)
+```
+
+
+```{r}
+low21 <- students21 %>% filter( pmax(promedio_cm_actual, promedio_lm_anterior) < 450 ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n())
+mid21 <- students21 %>% filter( pmax(promedio_cm_actual, promedio_lm_anterior)  >= 450 & pmax(promedio_cm_actual, promedio_lm_anterior) < 600  ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n())
+high21 <- students21 %>% filter( pmax(promedio_cm_actual, promedio_lm_anterior) >= 600  ) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n())
+```
+
+```{r}
+low_to_sample = round(low21$n*low - low21$na)
+mid_to_sample = round(mid21$n*mid - mid21$na)
+high_to_sample = round(high21$n*high - high21$na)
+```
+
+```{r}
+low_to_sample
+mid_to_sample
+high_to_sample
+```
+
+
+```{r}
+c(low_to_sample, mid_to_sample, high_to_sample)
+sum(c(low_to_sample, mid_to_sample, high_to_sample))
+```
+
+```{r}
+nrow(applications21) + sum(c(low_to_sample, mid_to_sample, high_to_sample))
+```
+
+
+```{r}
+students21 %<>% mutate(plm_level = ifelse(pmax(promedio_cm_actual, promedio_lm_anterior) < 450, 'low', ifelse(pmax(promedio_cm_actual, promedio_lm_anterior) < 600, 'mid', 'high')) )
+```
+
+```{r}
+write.csv(students21[,c("mrun", "plm_level")], "/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/plm_level.csv",  row.names = FALSE)
+```
+
+
+
+
+
+
+```{r}
+bies <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/ACCESO_BIES.csv", header=TRUE, sep=';')
+```
+
+
+```{r}
+colnames(bies)
+```
+
+```{r}
+bies %>% filter(grepl('MAYOR',NOMBRE_INSTITUCION))
+```
+
+
+
+```{r}
+bcu <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/ACCESO_BCU-8184.ETAPA2.csv", header=TRUE, sep=';')
+```
+
+```{r}
+colnames(bcu)
+```
+
+```{r}
+bcu %>% filter(grepl('MAYOR', NOMBRE_INSTITUCION))
+```
+
+```{r}
+mx <- merge(bcu, bies[,c('COD_IES', 'GRATUIDAD')], by="COD_IES")
+```
+
+```{r}
+colnames(mx)
+```
+
+```{r}
+mx %>% filter(GRATUIDAD.x != GRATUIDAD.y)
+```
+
+
+
+```{r}
+# as.list(str_split(bcu$ANIOS_ACREDITACION_INS, '_'))
+bcu$acreditacion <- str_split_fixed(bcu$ANIOS_ACREDITACION_INS, "_", 2)[,2]
+bcu$acreditacion <- ifelse(bcu$acreditacion == "", NA, as.numeric(bcu$acreditacion))
+```
+
+```{r}
+ac <- bcu %>% group_by(COD_IES) %>% summarise(ac.mx = max(acreditacion, na.rm=TRUE), ac.mn = min(acreditacion, na.rm=TRUE))
+```
+
+```{r}
+ac
+```
+
+```{r}
+bcu %>% filter(COD_IES == 84) %>% dplyr::select(ANIOS_ACREDITACION_INS)
+```
+
+
+
+
+
+
+
+
+
+```{r}
+nrow(students19) # Inscritos: 306052 - 308535 - 268841
+nrow(applications19) # Applications: 154366 - 146465 - 60k
+nrow(car19) # Carreras: 1806 - 1826 - 1910
+nrow(students)
+nrow(applications) 
+nrow(car20) 
+```
+
+# Inscritos: 306052 - 308535 - 268841
+# Applications: 154366 - 146465 - 60k
+# Carreras: 1806 - 1826 - 1910
+# Rinde lenguaje proceso actual: 280760 - 294898 - 234007
+
+```{r}
+students19 %>% filter(!is.na(MATE_ACTUAL)) %>% nrow()
+students21 %>% filter(!is.na(clec_actual)) %>% nrow()
+```
+
+```{r}
+234007/294898
+```
+
+```{r}
+colnames(students21)
+```
+
+
+```{r}
+car19 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2019/carreras.csv", sep=';', header=TRUE)
+car20 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2020/carreras.csv", sep=';', header=TRUE)
+car21 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/carreras.csv", sep=';', header=TRUE)
+```
+
+
+```{r}
+car19 %>% filter(CODIGO == 11037)
+```
+
+```{r}
+flf <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/first_last_full_2019_2020.csv", header=TRUE, sep=';')
+```
+
+```{r}
+flf %>% group_by(full_2019) %>% summarise(n())
+flf %>% group_by(full_2020) %>% summarise(n())
+1117/(1117+944)
+1166/(1166+895)
+```
+
+
+
+
+```{r}
+df <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/official/bases2021-feb2/ACCESO_BCU-8184.ETAPA2.csv", sep=";", header=TRUE)
+```
+
+```{r}
+colnames(df)
+```
+
+```{r}
+cols <- c("DURACION_ESTUDIOS", "DURACION_TITULACION", "DURACION_TOTAL", "DURACION_FORMAL_PROGRAMA")
+```
+
+```{r}
+df %>% filter(DURACION_FORMAL_PROGRAMA != DURACION_TOTAL) %>% dplyr::select(cols)
+```
+
+
+```{r}
+of <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/official/bases2021-feb2/ACCESO_OFERTA_CENTRALIZADA - 8691.V3.csv", sep=';', header=TRUE)
+```
+
+```{r}
+of %>% filter(CODIGO_DEMRE == 11081)
+```
+
+```{r}
+of <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2020/carreras.csv", sep=';', header=TRUE)
+```
+
+```{r}
+of %>% filter(CODIGO == 11081)
+```
+
+```{r}
+app20 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2020/C_POSTULANTES_SELECCION_PSU_2020_PUB_MRUN.csv", sep=';', header=TRUE)
+```
+
+```{r}
+colnames(app20)
+```
+
+
+```{r}
+app20 %>% filter(MRUN == 1238149)
+```
+
+
+```{r}
+punt <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/official/adm2021_archivo_C_demre_2021feb08_MRUN_Compartir.csv", sep=';', header=TRUE)
+```
+
+```{r}
+ins <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/Inscritos_final_febrero_MRUN.csv", sep=';', header=TRUE)
+```
+
+```{r}
+colnames(ins)
+```
+
+
+```{r}
+mr <- merge(ins, punt, by='mrun')
+```
+
+
+
+```{r}
+car21 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/carreras.csv", sep=';', header=TRUE)
+```
+
+```{r}
+car21 %>% nrow()
+```
+
+```{r}
+applications21
+```
+
+```{r}
+applications21 %>% filter(car_codigo_1prefer == 11045) %>% summarise(n=n()/nrow(applications21))
+```
+```{r}
+colnames(applications21)
+```
+
+```{r}
+applications19$PTJE_PREF_01 <- as.numeric(gsub(',', '.', applications19$PTJE_PREF_01))
+applications20$PTJE_PREF_01 <- as.numeric(gsub(',', '.', applications20$PTJE_PREF_01))
+```
+
+```{r}
+applications19 %>% filter(COD_CARRERA_PREF_01 == 11045 & PTJE_PREF_01 > 0) %>% summarise(n=n()/nrow(applications19), pp=mean(PTJE_PREF_01, na.rm=TRUE))
+applications20 %>% filter(COD_CARRERA_PREF_01 == 11045 & PTJE_PREF_01 > 0) %>% summarise(n=n()/nrow(applications20), pp=mean(PTJE_PREF_01, na.rm=TRUE))
+applications21 %>% filter(car_codigo_1prefer == 11045 & puntaje_carr1 > 0) %>% summarise(n=n()/nrow(applications21), pp=mean(puntaje_carr1))
+```
+
+
+```{r}
+aux <- applications21 %>% filter( substr(car_codigo_1prefer,1, 2) == '53' | 
+                                    substr(car_codigo_2prefer,1, 2) == '53' |
+                                    substr(car_codigo_3prefer,1, 2) == '53' |
+                                    substr(car_codigo_4prefer,1, 2) == '53' |
+                                    substr(car_codigo_5prefer,1, 2) == '53' |
+                                    substr(car_codigo_6prefer,1, 2) == '53' |
+                                    substr(car_codigo_7prefer,1, 2) == '53' |
+                                    substr(car_codigo_8prefer,1, 2) == '53' |
+                                    substr(car_codigo_9prefer,1, 2) == '53' |
+                                    substr(car_codigo_10prefer,1, 2) == '53')
+```
+
+
+```{r}
+write.csv(aux[,c('mrun')],"/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/postulantes_UBO.csv", row.names=FALSE)
+```
+
+
+```{r}
+dropbox_dir = "~/Dropbox/"
+```
+
+
+```{r}
+d_2020 <- read.csv("/Users/iriosu/Downloads/ArchivosABCDRemappedAEncuestas-2/2020/D_202011302111.csv", header=TRUE, sep=';')
+c_2020 <- read.csv("/Users/iriosu/Downloads/ArchivosABCDRemappedAEncuestas-2/2020/C_202011302111.csv", header=TRUE, sep=';')
+```
+
+
+
+
+
+
+
+# --------------------------------------------
+# Merging with new data from GIORGIO - 2020
+# --------------------------------------------
+
+```{r}
+survey_2020 <- read.csv(paste(dropbox_dir, "Mistakes in college admissions/data/clean/survey-responses-2020.csv", sep=''), header=TRUE)
+```
+
+```{r}
+survey_2020$ID <- str_replace(survey_2020$recipientemail, '@email.com', '')
+survey_2020$ID <- str_replace(survey_2020$ID, '"', '')
+```
+
+```{r}
+load("/Users/iriosu/Downloads/abcd-anonimizados/2020/A_202105150226.rdata")
+load("/Users/iriosu/Downloads/abcd-anonimizados/2020/B_202105150226.rdata")
+load("/Users/iriosu/Downloads/abcd-anonimizados/2020/C_202105150226.rdata")
+load("/Users/iriosu/Downloads/abcd-anonimizados/2020/D_202105150226.rdata")
+```
+
+```{r}
+bcd_2020 <- merge(b_2020, c_2020 %>% dplyr::select(-intersect(colnames(b_2020), colnames(c_2020))[2:12]) , by="ID")
+```
+
+```{r}
+bcd_2020 <- merge(bcd_2020, d_2020 %>% dplyr::select(-intersect(colnames(bcd_2020), colnames(d_2020))[2:3]) , by="ID")
+```
+
+```{r}
+bcd_2020 <- merge(bcd_2020, survey_2020, by="ID")
+```
+
+```{r}
+saveRDS(bcd_2020, "/Users/iriosu/Dropbox/Mistakes/Data/intermediate_data/bcd_and_survey_2020_20210517.rds")
+```
+
+
+# --------------------------------------------
+# Merging data MINEDUC - DEMRE 2021
+# --------------------------------------------
+
+```{r}
+apps_survey_21 <- read.csv("/Users/iriosu/Dropbox/Mistakes in college admissions/data/raw/implementation/survey-2021/postulaciones_202102240455puntajes.csv", header=TRUE, sep=';')
+apps_21 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/210217 Reporte Postulaciones MRUN v2 CB.csv", header=TRUE, sep=',')
+```
+
+```{r}
+last_app_21 <- apps_21 %>% group_by(MRUN) %>% mutate(last_folio = max(FOLIO_POSTULACION)) %>% filter(FOLIO_POSTULACION == last_folio) %>% as.data.frame()
+```
+
+```{r}
+last_app_21
+```
+
+```{r}
+apps_survey_21
+```
+
+```{r}
+apps_survey_21$PUNTAJE_CARR1 <- round(as.numeric(as.character(apps_survey_21$PUNTAJE_CARR1)), digits=2)
+apps_survey_21$PUNTAJE_CARR2 <- round(as.numeric(as.character(apps_survey_21$PUNTAJE_CARR2)), digits=2)
+apps_survey_21$PUNTAJE_CARR3 <- round(as.numeric(as.character(apps_survey_21$PUNTAJE_CARR3)), digits=2)
+apps_survey_21$PUNTAJE_CARR4 <- round(as.numeric(as.character(apps_survey_21$PUNTAJE_CARR4)), digits=2)
+apps_survey_21$PUNTAJE_CARR5 <- round(as.numeric(as.character(apps_survey_21$PUNTAJE_CARR5)), digits=2)
+apps_survey_21$PUNTAJE_CARR6 <- round(as.numeric(as.character(apps_survey_21$PUNTAJE_CARR6)), digits=2)
+apps_survey_21$PUNTAJE_CARR7 <- round(as.numeric(as.character(apps_survey_21$PUNTAJE_CARR7)), digits=2)
+apps_survey_21$PUNTAJE_CARR8 <- round(as.numeric(as.character(apps_survey_21$PUNTAJE_CARR8)), digits=2)
+apps_survey_21$PUNTAJE_CARR9 <- round(as.numeric(as.character(apps_survey_21$PUNTAJE_CARR9)), digits=2)
+apps_survey_21$PUNTAJE_CARR10 <- round(as.numeric(as.character(apps_survey_21$PUNTAJE_CARR10)), digits=2)
+```
+
+```{r}
+last_app_21[is.na(last_app_21)] <- -1
+apps_survey_21[is.na(apps_survey_21)] <- -1
+```
+
+
+
+```{r}
+mg <- merge(last_app_21, apps_survey_21, by=c("CAR_CODIGO_1PREFER", "CAR_CODIGO_2PREFER", "CAR_CODIGO_3PREFER", "CAR_CODIGO_4PREFER", "CAR_CODIGO_5PREFER", "CAR_CODIGO_6PREFER", "CAR_CODIGO_7PREFER", "CAR_CODIGO_8PREFER", "CAR_CODIGO_9PREFER", "CAR_CODIGO_10PREFER", "PUNTAJE_CARR1", "PUNTAJE_CARR2", "PUNTAJE_CARR3", "PUNTAJE_CARR4", "PUNTAJE_CARR5", "PUNTAJE_CARR6", "PUNTAJE_CARR7", "PUNTAJE_CARR8", "PUNTAJE_CARR9", "PUNTAJE_CARR10"))
+```
+
+```{r}
+mg %<>% group_by(ID) %>% mutate(nrep=n()) %>% ungroup
+```
+
+```{r}
+mg %>% filter(nrep > 1) %>% summarise(max(PUNTAJE_CARR1))
+```
+
+
+
+
+
+
+# ----------------------------------
+# Extra Analysis
+# ----------------------------------
+
+```{r}
+d_2021 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/Reporte_diario_postulaciones_final_mrun.csv", sep=",", header=TRUE)
+```
+
+
+```{r}
+c_2021 <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/adm2021_archivo_C_demre_2021feb08_MRUN_Compartir.csv", sep=";", header=TRUE)
+```
+
+```{r}
+id = 5157446
+c_2021 %>% filter(mrun == id)
+d_2021 %>% filter(mrun == id)
+```
+
+```{r}
+c_2021$promedio_cm_actual <- as.numeric(as.character(c_2021$promedio_cm_actual))
+c_2021$promedio_lm_anterior <- as.numeric(as.character(c_2021$promedio_lm_anterior))
+```
+
+
+```{r}
+aux <- c_2021 %>% filter(promedio_cm_actual < 450 & promedio_lm_anterior < 450 & pace != "PACE" & promedio_cm_actual > 0 & (hcso_actual > 0 | cien_actual > 0))
+```
+
+```{r}
+aux <- merge(aux, d_2021)
+```
+
+```{r}
+aux
+```
+
+

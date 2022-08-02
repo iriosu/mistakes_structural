@@ -1,0 +1,149 @@
+---
+title: "anais issue"
+output: html_document
+---
+```{r echo=FALSE, message=FALSE, results='hide'}
+rm(list=ls())
+gc()
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+#library(rddtools)
+library(parallel)
+library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+```
+
+# Load files
+```{r}
+df <- read.csv(file = "~/Dropbox/Mistakes/Code/R/recommendation/outputs/df_merge_recommendations.csv")
+```
+
+```{r}
+load("/Users/iriosu/Dropbox/Mistakes Structural/Data/intermediate_data/appFinal_before_after.rds")
+```
+
+# First, check consistrency between file of recommendations, general messages and Strata_2
+```{r}
+aba <- merge(df, appFinal_before_after, by.x="mrun", by.y="MRUN")
+```
+
+```{r}
+aba %>% filter(general_message == Strata_2) %>% group_by(general_message, Strata_2) %>% tally()
+```
+
+```{r}
+# general message 1
+aba %>% filter(prob_1 == 1) %>% group_by(Strata_2) %>% tally()
+# general message 2
+aba %>% filter(prob_1 < 1 & overall_prob >= 0.7 & overall_prob < 1 & pace == 0) %>% group_by(Strata_2) %>% tally()
+# general message 3
+aba %>% filter(prob_1 < 1 & overall_prob < 0.7 & pace == 0) %>% group_by(Strata_2) %>% tally()
+```
+
+# Check consistency of files used in Anais code (this is copy paste from analysis_warnings.R, line 1892)
+```{r}
+risk_initial <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/applications_and_probs_for_stratas.csv', sep=';', header=TRUE)
+risk_initial %<>% select(MRUN, overall_prob)
+risk_initial %<>% dplyr::rename(overall_prob_initial=overall_prob)
+
+    #Load Final Risk Database
+risk_final <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/bootstrap_final_admission_probabilities/applications_and_probs_last.csv', sep=';', header=TRUE)
+risk_final %<>% select(MRUN, overall_prob)
+risk_final %<>% dplyr::rename(overall_prob_final=overall_prob)
+
+    #Merge both datasets
+risk = merge(risk_final, risk_initial, by="MRUN", all.x = TRUE)
+remove(risk_initial, risk_final)
+```
+
+```{r}
+abar <- merge(appFinal_before_after, risk, by="MRUN", all.x=TRUE)
+```
+
+Add columns general_message, pace and prob_1 (admission prob in top preference initial)
+```{r}
+abar <- merge(abar, aba %>% dplyr::select(mrun, general_message, pace, prob_1), by.x = "MRUN", by.y="mrun")
+```
+
+
+Check conditions for messages
+```{r}
+# general message 1
+abar %>% filter(prob_1 == 1) %>% group_by(Strata_2) %>% tally()
+# general message 2
+abar %>% filter(prob_1 < 1 & overall_prob_initial >= 0.7 & overall_prob_initial < 1 & pace == 0) %>% group_by(Strata_2) %>% tally()
+# general message 3
+abar %>% filter(prob_1 < 1 & overall_prob_initial < 0.7 & pace == 0) %>% group_by(Strata_2) %>% tally()
+```
+As you can see from here, Strata_2 is correct. The NAs are due to Cris removing them.
+
+```{r}
+#Compute the risk and the change in risk
+abar %<>% mutate(risk_initial = 1-overall_prob_initial)
+abar %<>% mutate(risk_final = 1-overall_prob_final)
+abar %<>% mutate(change_risk = risk_final-risk_initial)
+abar %<>% mutate(reduced_risk = ifelse(change_risk<0, 1, 0))
+abar %<>% mutate(increased_risk = ifelse(change_risk>0, 1, 0))
+```
+
+
+These are the tables Anais was generating.
+```{r}
+table(abar %>% subset(risk_initial>=0.70) %>% select(Strata_2_label), useNA="always")                      #We have 9476 students in the Safety strata, 29 in Explore
+table(abar %>% subset(risk_initial>=0.30 & risk_initial<0.70) %>% select(Strata_2_label), useNA="always")  #Pb: 563 students in the safety strata
+table(abar %>% subset(risk_initial<0.01) %>% select(Strata_2_label), useNA="always")                       #Pb: 34,661 students in explore, 668 "safety and reach" and 11,398 NA
+```
+If you want to correctly write the conditions in terms of risk, these should be:
+- General message 1: risk_initial == 0 and prob_1 == 1
+- General message 2: prob_1 < 1 and risk_initial < 0.3 and risk_initial > 0 and pace == 0
+- General message 3: prob_1 < 1 and risk_initial >= 0.3 and pace == 0
+
+```{r}
+table(abar %>% filter(prob_1 == 1) %>% select(Strata_2), useNA="always")                      #We have 9476 students in the Safety strata, 29 in Explore
+table(abar %>% filter(risk_initial <= 0.3 & risk_initial > 0 & prob_1 < 1 & pace == 0) %>% select(Strata_2), useNA="always")  #Pb: 563 students in the safety strata
+table(abar %>% filter(risk_initial > 0.3 & prob_1 < 1 & pace == 0) %>% select(Strata_2), useNA="always") #Pb: 34,661 students in explore, 668 "safety and reach" and 11,398 NA
+```
+
+```{r}
+abar %>% filter(risk_initial > 0.3 & prob_1 < 1 & pace == 0) %>% filter(Strata_2 == 2) %>% dplyr::select(overall_prob_initial, risk_initial)
+```
+
+
+```{r}
+# general message 1
+abar %>% filter(prob_1 == 1) %>% group_by(Strata_2) %>% tally()
+# general message 2
+abar %>% filter(prob_1 < 1 & overall_prob_initial >= 0.7 & overall_prob_initial < 1 & pace == 0) %>% group_by(Strata_2) %>% tally()
+# general message 3
+abar %>% filter(prob_1 < 1 & overall_prob_initial < 0.7 & pace == 0) %>% group_by(Strata_2) %>% tally()
+```
+
+
+

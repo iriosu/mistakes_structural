@@ -1,0 +1,294 @@
+---
+title: "Analysis"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+---
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+rm(list=ls())
+gc()
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(rddtools)
+library(parallel)
+library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(tidyverse)
+library(haven)
+```
+
+```{r}
+dropbox_dir <- "~/Dropbox/"
+```
+
+# Proceso 2022
+```{r}
+car <- read.csv(paste(dropbox_dir, "/Mistakes/Code/Python/Cartillas/data/2022/carreras_v2.csv", sep=''), header=TRUE, sep=";")
+```
+
+```{r}
+dm <- read.csv(file = paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/outputs/2022/preprocessing_rct.csv", sep=""), header=TRUE, sep=";")
+scores <- read.csv(file = paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/data/2022/puntajes_consolidado_v2.csv", sep=""), header=TRUE, sep=",")
+```
+
+```{r}
+of <- read.csv(paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/data/2022/seleccion_20_01_22.csv", sep=''))
+```
+
+```{r}
+colnames(of)
+```
+
+
+```{r}
+of_l <- reshape(of[,c(1,4:53)], direction='long', 
+                    varying=colnames(of[,4:53]), 
+                    times=c('01', '02', '03', '04', '05', '06', '07', '08', '09', '10'),
+                    v.names=c('cod_carrera_pref', 'estado_pref','ptje_pref', 'lugar_pref', 'pond_acad_pref'),
+                    idvar='mrun')
+colnames(of_l) <- c("mrun", "pref", "codigo_carrera", "marca", "orden", "puntano", "puntpond") # this is just me not knowing how to use reshape
+```
+
+```{r}
+of_l %>% filter(codigo_carrera==11045 & marca == 24) %>% dplyr::summarise(min(puntpond))
+```
+
+```{r}
+df <- merge(dm, of, by="mrun")
+```
+
+```{r}
+df %>% filter(codigo_carrera_1 != cod_carrera_pref_01) %>% nrow()
+df %>% filter(codigo_carrera_1 == cod_carrera_pref_01 & marca_1 == 25 & !(estado_pref_01 %in% c(24, 25, 26))) %>% nrow()
+df %>% filter(codigo_carrera_1 == cod_carrera_pref_01 & marca_1 != 25 & (estado_pref_01 %in% c(24, 25, 26))) %>% nrow()
+```
+
+```{r}
+df %>% filter(codigo_carrera_1 == cod_carrera_pref_01 & marca_1 != 25 & (estado_pref_01 %in% c(24, 25, 26))) %>% group_by(marca_1) %>% tally()
+```
+
+# Check assignment
+```{r}
+ow <- read.csv(paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/outputs/2022/asignacion_obtenida_reg_finales.csv", sep=''), header=TRUE, sep=';')
+```
+
+
+```{r}
+colnames(of)
+colnames(ow)
+```
+
+
+
+
+```{r}
+df <- merge(ow, of_l, by.x=c("id_alumno", "codigo_carrera"), by.y=c("mrun", "codigo_carrera"), all=TRUE)
+```
+
+
+```{r}
+df %>% filter(marca.x == 24 & marca.y != 24) %>% nrow()
+df %>% filter(marca.x == 24 & marca.y != 24) %>% group_by(marca.y) %>% tally()
+df %>% filter(marca.x != 24 & marca.y == 24) %>% group_by(marca.x) %>% tally()
+```
+
+```{r}
+df %>% filter(marca.x == 24 & marca.y != 24) %>% arrange(-puntpond.x) %>% dplyr::select(id_alumno, pref.x,codigo_carrera, puntpond.x, puntpond.y, orden.x, orden.y)
+```
+```{r}
+df %>% filter(codigo_carrera == 12039 & marca.x==24) %>% arrange(orden.y) %>% dplyr::select(id_alumno, puntpond.x, puntpond.y, marca.x, marca.y, orden.x, orden.y)
+```
+```{r}
+pids <- of_l %>% filter(codigo_carrera == 12039 & marca == 24) %>% pull(mrun)
+df %>% filter((id_alumno %in% pids) & codigo_carrera == 12039) 
+```
+```{r}
+car %>% group_by(MAXIMO_POSTULACIONES, EXCLUY_PREFERENCIA) %>% tally()
+```
+
+
+
+
+```{r}
+car %>% filter(CODIGO_DEMRE == 12039)
+```
+
+
+# 2022 not official
+
+```{r}
+ps <- read.csv(file = paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/data/2022/raw/postulaciones_actual_12_01_22.csv", sep=""), header=TRUE, sep=",")
+```
+
+```{r}
+df <- merge(dm, ps, by="mrun")
+df %<>% mutate(diff = abs(puntpond_1/100 - ptje_pref_01))
+
+df <- merge(df, car %>% dplyr::select(CODIGO_DEMRE, PUNTAJE_PROMEDIO_MINIMO, PUNTAJE_PONDERADO_MINIMO, PRUEBA_ESPECIAL, CAR_PEDAGOGIA,TIPO_PEDAGOGIA ), by.x="codigo_carrera_1", by.y="CODIGO_DEMRE")
+df <- merge(df, scores, by="mrun")
+```
+
+#### Puntaje no calculado en input y si en nuestro
+```{r}
+df %>% filter(diff > 0.1 & ptje_pref_01 == -1 & puntpond_1 > 0) %>% distinct(codigo_carrera_1)
+df %>% filter(diff > 0.1 & ptje_pref_01 == -1 & puntpond_1 > 0) %>% dplyr::select(mrun, codigo_carrera_1, cod_carrera_pref_01, puntpond_1, ptje_pref_01, marca_1, PRUEBA_ESPECIAL)
+df %>% filter(diff > 0.1 & ptje_pref_01 == -1 & puntpond_1 > 0 & is.na(PRUEBA_ESPECIAL)) %>% dplyr::select(mrun, codigo_carrera_1, cod_carrera_pref_01, puntpond_1, ptje_pref_01, marca_1, PRUEBA_ESPECIAL)
+```
+
+RESULTADO: discrepancia se debe a pruebas especiales, listas tabu o estudios en extranjero.
+
+#### Puntaje calculado en input y no valida en nuestro
+
+```{r}
+df %>% filter(diff > 0.1 & ptje_pref_01 > 0 & puntpond_1 == 0 & ptje_pref_01 > PUNTAJE_PONDERADO_MINIMO & (promedio_cm_actual > PUNTAJE_PROMEDIO_MINIMO | promedio_cm_anterior > PUNTAJE_PROMEDIO_MINIMO) & (percentil_cm_actual > 50 | percentil_cm_anterior > 50 | porc_sup_notas %in% c(10, 20, 30))) %>% dplyr::select(mrun, codigo_carrera_1, cod_carrera_pref_01, puntpond_1, ptje_pref_01, marca_1, porc_sup_notas, ptje_nem,CAR_PEDAGOGIA, PRUEBA_ESPECIAL, TIPO_PEDAGOGIA, PUNTAJE_PONDERADO_MINIMO) %>% arrange(CAR_PEDAGOGIA)
+```
+
+```{r}
+df %>% filter(marca_1 == 25 & ptje_pref_01 == 0 )
+df %>% filter(marca_2 == 25 & ptje_pref_02 == 0 )
+df %>% filter(marca_3 == 25 & ptje_pref_03 == 0 )
+df %>% filter(marca_7 == 25 & ptje_pref_07 == 0 )
+df %>% filter(marca_10 == 25 & ptje_pref_10 == 0 )
+```
+
+
+
+
+RESULTADO: preprocesamiento pareciera estar bien. 
+Discrepancias solo en 
+- pedagogia, pero alumno no esta en 30% superior de su establecimiento en todos los casos.
+- algunos casos no pedagogia, pero en todos el alumno no tiene nem. Esto se debe a estudios acreditados en el extranjero.
+
+
+
+# Proceso 2021
+
+```{r}
+car <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/carreras.csv", header=TRUE, sep=";")
+```
+
+```{r}
+map <- readRDS(paste(dropbox_dir, "Mistakes Structural/Data/Data_from_Mistakes_1/interim/mapping_mrun_hash_2021.rds", sep=""))
+map %<>% dplyr::rename(ID = id, MRUN=mrun)
+```
+
+```{r}
+c21 <- read.csv(file = paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/data/2021/C_oficial.csv", sep=""), header=TRUE, sep=';')
+d21 <- read.csv(file = paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/data/2021/D_oficial.csv", sep=""), header=TRUE, sep=";")
+dm <- read.csv(file = paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/outputs/2021/preprocessing.csv", sep=""), header=TRUE, sep=";")
+d21 %<>% ungroup %>% as.data.frame()
+dm %<>% ungroup %>% as.data.frame()
+
+df <- merge(d21, dm, by.x="ID", by.y="mrun")
+df <- merge(df, c21, by="ID")
+
+df <- merge(df, map %>% dplyr::select(ID, MRUN), by="ID", all.x=TRUE)
+```
+
+```{r}
+mat_2 <- read.csv("/Users/iriosu/Dropbox/DEMRE - Datos/2021/D_MATRICULA_PDT__2021_PUB_MRUN.csv", header=TRUE, sep=';')
+c21_2 <- read.csv("/Users/iriosu/Dropbox/DEMRE - Datos/2021/A_INSCRITOS_PUNTAJES_PDT_2021_PUB_MRUN.csv", header=TRUE, sep=';')
+d21_2 <- read.csv("/Users/iriosu/Dropbox/DEMRE - Datos/2021/C_POSTULANTES_SELECCION_PDT_2021_PUB_MRUN.csv", header=TRUE, sep=';')
+
+df_2 <- merge(c21_2, d21_2 %>% dplyr::select(c("MRUN",setdiff(colnames(d21_2), colnames(c21_2)))), by="MRUN")
+df_2 <- merge(df_2, mat_2 %>% dplyr::select(c("MRUN",setdiff(colnames(mat_2), colnames(df_2)))), by="MRUN")
+```
+
+
+
+
+# Validos en propio y no validos en oficial
+
+```{r}
+df %>% filter(!is.na(MRUN) & marca_1 == 25 & !(ESTADO_PREF_01 %in% c(24, 25, 26))) %>% group_by(ESTADO_PREF_01) %>% tally()
+df %>% filter(!is.na(MRUN) & marca_6 == 25 & !(ESTADO_PREF_06 %in% c(24, 25, 26))) %>% group_by(ESTADO_PREF_06) %>% tally()
+df %>% filter(!is.na(MRUN) & marca_10 == 25 & !(ESTADO_PREF_10 %in% c(24, 25, 26))) %>% group_by(ESTADO_PREF_10) %>% tally()
+```
+
+19, 20, 22 y 23 estan relacionados con pruebas especiales y listas tabu, asi que es esperada esa discrepancia (no tenemos esos inputs)
+Con respecto a discrepancias en 9, hay q revisar el detalle. 
+
+Las discrepancias con respecto a 9 se resuelven si considero solo la gente que tiene MRUN y que venia en la base de datos enviada por MINEDUC. Es decir, la discrepancia se puede deber a que esos alumnos son especiales (sin consent).
+
+Con respecto a las discrepancias en marca 32 (estudios no acreditados en el extranjero), no tenemos en el input el tipo de documento, asi que no podemos validar los estudios.
+```{r}
+df %>% filter(!is.na(MRUN) & marca_1 == 25 & ESTADO_PREF_01 == 32) %>% dplyr::select(MRUN, ID, SITUACION_EGRESO)
+```
+
+```{r}
+c21 %>% filter(ID == "a4e452199de564642b30892c392e34c14baa540322562440badc14f0a5873f0e")
+c21_2 %>% filter(MRUN == 26303558)
+```
+
+
+# No validos en propio y validos en oficial
+```{r}
+df %>% filter(!is.na(MRUN) & marca_1 != 25 & (ESTADO_PREF_01 %in% c(24, 25, 26))) %>% group_by(marca_1) %>% tally()
+df %>% filter(!is.na(MRUN) & marca_6 != 25 & (ESTADO_PREF_06 %in% c(24, 25, 26))) %>% group_by(marca_6) %>% tally()
+df %>% filter(!is.na(MRUN) & marca_10 != 25 & (ESTADO_PREF_10 %in% c(24, 25, 26))) %>% group_by(marca_10) %>% tally()
+```
+
+## Marca 36
+
+- Discrepancias en marca 36 se deben a prueba especial. Ambos casos son Teatro en Finis Terra que exige prueba especial y solo tiene minimo ponderado post prueba especial. Como no tengo puntajes de prueba especial, estos alumnos no cumplen con ese requisito, pero considerando la prueba especial si cumplirian con el pool de puntajes anteriores. A continuacion el detalle.
+
+```{r}
+df %>% filter(!is.na(MRUN) & marca_1 == 36 & (ESTADO_PREF_01 %in% c(24, 25, 26))) %>% dplyr::select(MRUN, ID, PROMEDIO_CM_ACTUAL, PROMEDIO_LM_ANTERIOR)
+```
+
+```{r}
+car %>% filter(CODIGO == 40090)
+d21_2 %>% filter(MRUN == 2081735)
+c21_2 %>% filter(MRUN == 2081735)
+c21 %>% filter(ID == "4cd71e682615e8b689d57a537e18a8b720962af306f2f9b7db6739013ac708eb")
+```
+```{r}
+car %>% filter(CODIGO == 40090)
+d21_2 %>% filter(MRUN == 5398542)
+c21_2 %>% filter(MRUN == 5398542)
+c21 %>% filter(ID == "b3e6db0ef5ecf84f152023a8acb361fbf86045863fccce8cb9872209bc310de8")
+```
+
+## Marca 17
+No cumple con puntaje minimo ponderado
+
+```{r}
+df %>% filter(!is.na(MRUN) & marca_1 == 17 & (ESTADO_PREF_01 %in% c(24, 25, 26))) %>% dplyr::select(MRUN, ID, codigo_carrera_1)
+aux <- df %>% filter(!is.na(MRUN) & marca_1 == 17 & (ESTADO_PREF_01 %in% c(24, 25, 26))) %>% distinct(codigo_carrera_1) %>% pull(codigo_carrera_1)
+```
+
+```{r}
+car %>% filter(CODIGO %in% aux)
+```
+
+Todas las discrepancias que quedan se producen en carreras que exigen prueba especial pondera y que solo restringen el puntaje ponderado final, no el "antes de prueba especial". Como no tenemos puntajes de prueba especial, es posible que el alumno cumpla con el minimo ponderado (considerando PE) pero que no lo cumpla si no consideramos esa prueba especial.

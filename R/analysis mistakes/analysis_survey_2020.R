@@ -81,65 +81,65 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE, conf.i
   return(datac)
 }
 
+##################### 2020 ###################################
 
-# Simulating biased beliefs -----------------------------------------------
-
-n_sim = 10000
-scores = runif(n_sim, min = 680, max = 720)
-cutoff = 700
-sd_true = 5
-sd_noise = 5
-graviating_middle = 0.65
-cutoff_subj = cutoff + ifelse((scores - rep(cutoff, n_sim)) > 0,
-                              (scores - rep(cutoff, n_sim))^graviating_middle,
-                              -(-(scores - rep(cutoff, n_sim)))^graviating_middle)
-#sd_noise = ifelse(abs(scores - rep(cutoff, n_sim)) < 5, sd_noise*4,
-#       ifelse(abs(scores - rep(cutoff, n_sim)) < 10, sd_noise*3, sd_noise))
-#bias_noise = rnorm(n_sim, mean = 0, sd = sd_noise)
-#true_noise = rnorm(n_sim, mean = 0, sd = sd_true)
-subj_beliefs = pnorm( (scores - (cutoff_subj))/sd_noise)
-ratex_beliefs = pnorm( (scores - (cutoff))/sd_true)
-hist(subj_beliefs)
-hist(ratex_beliefs)
-
-
-##################### 2019 ###################################
-
-# Load preprocessed data for 2019
-#NOTE: the data seems to have all the potential participants of the admission process of 2019
+# Load preprocessed data for 2020
+#NOTE: the data seems to have all the potential participants of the admission process of 2020
 # currently we are copy-pasting the output of that script
-#dfs_2019 = readRDS("data/interim/bcd_and_survey_2019_20210325.rds")
-#dfs_2019 = readRDS("data/interim/bcd_and_survey_2019_20210420.rds")
-dfs_2019 = readRDS("data/interim/bcd_and_survey_2019.rds")
+dfs_2020 = readRDS("data/interim/bcd_and_survey_2020.rds")
 
 # Analyze first only students who answered completely the survey
-dfs_2019 %<>% filter(finished == "True")
+dfs_2020 %<>% filter(finished == "True")
 
 # Filter PACE students
-dfs_2019 %<>% mutate(PACE = ifelse(is.na(PACE), "No PACE","PACE"))
-dfs_2019 %<>% filter(PACE != "PACE")
+dfs_2020 %<>% mutate(PACE = ifelse(is.na(PACE), "No PACE","PACE"))
+dfs_2020 %<>% filter(PACE != "PACE")
 
 #Check BEA
-dfs_2019 %<>% mutate(BEA = ifelse(is.na(BEA), "No BEA","BEA"))
-cro_cpct(dfs_2019$BEA)
+dfs_2020 %<>% mutate(BEA = ifelse(is.na(BEA), "No BEA","BEA"))
+cro_cpct(dfs_2020$BEA)
 
 # Filter students with less than 450 points who face zero admission prob everywhere
-dfs_2019 %<>% filter(pmax(PROMEDIO_LM_ACTUAL, PROMEDIO_LM_ANTERIOR) >= 450)
+dfs_2020 %<>% filter(pmax(PROMEDIO_LM_ACTUAL, PROMEDIO_LM_ANTERIOR) >= 450)
 
 #Check duration distribution of the entire survey
-hist(dfs_2019$duration[dfs_2019$duration < 60])
-sum(dfs_2019$duration < 60)
-sum(dfs_2019$duration > 5)
+hist(dfs_2020$duration[dfs_2020$duration < 60])
+sum(dfs_2020$duration < 60)
+sum(dfs_2020$duration > 5)
 
 #TODO: we need to define which students we exclude from the survey, because they take the survey in less that X minutes
 #Exlusion criteria
-dfs_2019 %<>% filter(duration >= 5)
+dfs_2020 %<>% filter(duration >= 5)
 
 # Data wrangling ----------------------------------------------------------
 
-dfs_mistakes_2019 = dfs_2019 %>% filter(some_mistake == 1)
-dfs_mistakes_2019 %<>% mutate(know_error = ifelse(know_error == "Si", "Yes", "No"))
-dfs_mistakes_2019 %<>% mutate(reason_error_yes = ifelse(reason_error_yes ==
+#Renaming some variables to be consistent with data of survey 2019
+#TODO: erase this line once Manuel changes the names in the input
+dfs_2020 %<>% dplyr::rename(error_dumm1  = error1,
+                            error_dumm2  = error2,
+                            error_dumm3  = error3,
+                            error_dumm4  = error4,
+                            error_dumm5  = error5,
+                            error_dumm6  = error6,
+                            error_dumm7  = error7,
+                            error_dumm8  = error8,
+                            error_dumm9  = error9,
+                            error_dumm10 = error10,
+                            scores_carr1  = puntaje_carr1,
+                            scores_carr2  = puntaje_carr2,
+                            scores_carr3  = puntaje_carr3,
+                            scores_carr4  = puntaje_carr4,
+                            scores_carr5  = puntaje_carr5,
+                            scores_carr6  = puntaje_carr6,
+                            scores_carr7  = puntaje_carr7,
+                            scores_carr8  = puntaje_carr8,
+                            scores_carr9  = puntaje_carr9,
+                            scores_carr10 = puntaje_carr10,
+                            ID = id)
+# Dataframe for mistakes
+dfs_mistakes_2020 = dfs_2020 %>% filter(some_mistake == 1)
+dfs_mistakes_2020 %<>% mutate(know_error = ifelse(know_error == "Si", "Yes", "No"))
+dfs_mistakes_2020 %<>% mutate(reason_error_yes = ifelse(reason_error_yes ==
                                                         "Al no afectar el resto de mi postulación, incluí las carreras de mi preferencia aunque no cumpliera con todos los requisitos para cada una de ellas.",
                                                         "It doesn't affect my \n application and it is one \n of my preferred programs",
                                                         ifelse(reason_error_yes ==
@@ -149,14 +149,16 @@ dfs_mistakes_2019 %<>% mutate(reason_error_yes = ifelse(reason_error_yes ==
                                                                       ifelse(reason_error_yes ==
                                                                                "Pensé que existía la posibilidad de que la postulación a dichas carreras fuera considerada, pese a que no cumplía con alguno de los  requisitos de postulación.",
                                                                              "I believed there was \n a positive probability \n of admission anyways", "None")))))
-# dfs_mistakes_2019 %<>% mutate(reason_error_no_1 = ifelse(reason_error_no_1 == "Falta de acceso a la información.", "Yes", "No"))
-# dfs_mistakes_2019 %<>% mutate(reason_error_no_2 = ifelse(reason_error_no_2 == "La información es poco clara.", "Yes", "No"))
-
+# dfs_mistakes_2020 %<>% mutate(reason_error_no_1 = ifelse(reason_error_no_1 == "Falta de acceso a la información.", "Yes", "No"))
+# dfs_mistakes_2020 %<>% mutate(reason_error_no_2 = ifelse(reason_error_no_2 == "La información es poco clara.", "Yes", "No"))
+# Some tests
+dfs_mistakes_2020 %>% subset(know_error == "Yes") %>% 
+  group_by(reason_error_yes) %>% tally() %>%  mutate(freq = 100*n / sum(n))
 
 # Awareness of mistakes ---------------------------------------------------
 
 # Aware or not
-ggplot(dfs_mistakes_2019, aes(x = know_error, fill = know_error)) +
+ggplot(dfs_mistakes_2020, aes(x = know_error, fill = know_error)) +
   geom_bar(position="dodge", alpha = alpha, aes(y = 100*(..count..)/sum(..count..))) +
   geom_text(aes( label = round(100*(..count..)/sum(..count..),2),
                  y= 100*(..count..)/sum(..count..) ), stat= "count", vjust = +1.5) +
@@ -167,10 +169,10 @@ ggplot(dfs_mistakes_2019, aes(x = know_error, fill = know_error)) +
   theme_bw() +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/aware_error_2019.pdf", width=10, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/aware_error_2020.pdf", width=10, height=5)
 
 # Reason conditional on being aware
-ggplot(dfs_mistakes_2019 %>% subset(know_error == "Yes"), aes(x = reason_error_yes, fill = fill)) +
+ggplot(dfs_mistakes_2020 %>% subset(know_error == "Yes"), aes(x = reason_error_yes, fill = fill)) +
   geom_bar(position="dodge", alpha = alpha, aes(y = 100*(..count..)/sum(..count..))) +
   geom_text(aes( label = round(100*(..count..)/sum(..count..),2),
                  y= 100*(..count..)/sum(..count..) ), stat= "count", vjust = +1.5) +
@@ -183,14 +185,16 @@ ggplot(dfs_mistakes_2019 %>% subset(know_error == "Yes"), aes(x = reason_error_y
         panel.grid.minor = element_blank(),
         legend.position = "none",
         panel.background = element_blank())
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/reason_error_aware_Yes_2019.pdf", width=10, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/reason_error_aware_Yes_2020.pdf", width=10, height=5)
+#TODO: analyze why this graph changes significantly compare to 2019 one (fraction who apply anyway because
+#they believe there is still a positive probability, grows from 58% to 64%)
 
 # Reason conditional on being aware and biased beliefs for top-reported pref with error
-dfs_mistakes_2019 %>% subset((know_error == "Yes") & (error_dumm1 == 1)) %>%
+dfs_mistakes_2020 %>% subset((know_error == "Yes") & (error_dumm1 == 1)) %>%
                                group_by(reason_error_yes) %>%
                                summarise(mean_bias = mean(prob_first))
 
-ggplot(dfs_mistakes_2019 %>% subset((know_error == "Yes") & (error_dumm1 == 1)),
+ggplot(dfs_mistakes_2020 %>% subset((know_error == "Yes") & (error_dumm1 == 1)),
        aes(x = reason_error_yes, fill = reason_error_yes)) +
   geom_bar(position="dodge", alpha = alpha, aes(y = 100*(..count..)/sum(..count..))) +
   geom_point(position=position_dodge(1), alpha = alpha,
@@ -205,7 +209,7 @@ ggplot(dfs_mistakes_2019 %>% subset((know_error == "Yes") & (error_dumm1 == 1)),
   theme_bw() +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/reason_error_aware_Yes_mean_bias_2019.pdf", width=10, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/reason_error_aware_Yes_mean_bias_2020.pdf", width=10, height=5)
 
 # Knows someone in the program --------------------------------------------
 
@@ -218,20 +222,20 @@ for (p in 1:10){
   col_var =  paste('error_dumm', p, sep='')
   col_pref = paste('COD_CARRERA_PREF_', sp, sep='')
   #Replace with NA the variable when the student did not apply to that program
-  dfs_2019[, col_var] = ifelse(dfs_2019[, col_pref] == 0, NA, dfs_2019[, col_var])
+  dfs_2020[, col_var] = ifelse(dfs_2020[, col_pref] == 0, NA, dfs_2020[, col_var])
 }
 #Rename some variables
-setnames(dfs_2019,
+setnames(dfs_2020,
          old = c('error_dumm1','error_dumm2','error_dumm3','error_dumm4','error_dumm5','error_dumm6','error_dumm7','error_dumm8','error_dumm9','error_dumm10'),
          new = c('error_dumm_1','error_dumm_2','error_dumm_3','error_dumm_4','error_dumm_5','error_dumm_6','error_dumm_7','error_dumm_8','error_dumm_9','error_dumm_10'))
 #Correlation between making an admissibility mistake and knowing someone in the program
 #Select only the error dummies, if the student know someone in that program, and the number of applications
-dfs_error_dumm_2019 = dfs_2019 %>% select(starts_with("nw"),
+dfs_error_dumm_2020 = dfs_2020 %>% select(starts_with("nw"),
                                           starts_with("error_dumm"),
                                           starts_with("COD_CARRERA_PREF_"),
                                           ID, n_apps, some_mistake)
 # Reshae data to long to compute the correlation
-dfs_error_dumm_2019_l <- reshape(dfs_error_dumm_2019,
+dfs_error_dumm_2020_l <- reshape(dfs_error_dumm_2020,
                                  direction='long',
                                  varying=list(c('nw_1','nw_2','nw_3','nw_4','nw_5','nw_6','nw_7','nw_8','nw_9','nw_10'),
                                               c('error_dumm_1','error_dumm_2','error_dumm_3','error_dumm_4','error_dumm_5','error_dumm_6','error_dumm_7','error_dumm_8','error_dumm_9','error_dumm_10'),
@@ -239,26 +243,26 @@ dfs_error_dumm_2019_l <- reshape(dfs_error_dumm_2019,
                                  times=1:10,
                                  v.names=c('nw', 'error_dumm', 'codigo_car'),
                                  idvar=c('ID','n_apps','some_mistake'))
-dfs_error_dumm_2019_l %<>% filter(!is.na(nw))
+dfs_error_dumm_2020_l %<>% filter(!is.na(nw))
 # Compute correlation between knowing someone and making a mistake in the application
 # Nothing very interesting
-cro_cpct(dfs_error_dumm_2019_l$nw,dfs_error_dumm_2019_l$error_dumm)
-cro_cpct((dfs_error_dumm_2019_l %>% filter(some_mistake == 1))$nw,
-         (dfs_error_dumm_2019_l %>% filter(some_mistake == 1))$error_dumm)
-cor((dfs_error_dumm_2019_l %>% filter(some_mistake == 1))$nw,
-    (dfs_error_dumm_2019_l %>% filter(some_mistake == 1))$error_dumm)
-m1 = lm(data = (dfs_error_dumm_2019_l %>% filter(some_mistake == 1)), formula = error_dumm ~ nw)
+cro_cpct(dfs_error_dumm_2020_l$nw,dfs_error_dumm_2020_l$error_dumm)
+cro_cpct((dfs_error_dumm_2020_l %>% filter(some_mistake == 1))$nw,
+         (dfs_error_dumm_2020_l %>% filter(some_mistake == 1))$error_dumm)
+cor((dfs_error_dumm_2020_l %>% filter(some_mistake == 1))$nw,
+    (dfs_error_dumm_2020_l %>% filter(some_mistake == 1))$error_dumm)
+m1 = lm(data = (dfs_error_dumm_2020_l %>% filter(some_mistake == 1)), formula = error_dumm ~ nw)
 summary(m1)
 
 # Knowledge of requirements -----------------------------------------------
 
 #Change some names
-setnames(dfs_2019,
+setnames(dfs_2020,
          old = c('reqs_codigo1','reqs_codigo2'),
          new = c('reqs_codigo_1','reqs_codigo_2'))
-dfs_reqs_2019 = dfs_2019 %>% select(starts_with("req"), ID, some_mistake)
+dfs_reqs_2020 = dfs_2020 %>% select(starts_with("req"), ID, some_mistake)
 # Reshape data to long
-dfs_reqs_2019_l <- reshape(dfs_reqs_2019,
+dfs_reqs_2020_l <- reshape(dfs_reqs_2020,
                           direction='long',
                           varying =list(c("req_value_ppm_1", "req_value_ppm_2"),
                                         c("req_value_plm_1", "req_value_plm_2"),
@@ -289,15 +293,22 @@ dfs_reqs_2019_l <- reshape(dfs_reqs_2019,
                                     "reqs_codigo"),
                           idvar=c('ID','some_mistake'))
 # Drop NAs
-dfs_reqs_2019_l %<>% filter(!is.na(reqs_codigo))
+dfs_reqs_2020_l %<>% filter(!is.na(reqs_codigo))
 # Merge the data to carreras requisitos
-cars_2019 = read.csv2("data/raw/demre/data-giorgio/oferta2019_201812021829.csv")
-dfs_reqs_2019_l =  merge(dfs_reqs_2019_l, cars_2019, by.x = "reqs_codigo", by.y = "CODIGO", all.x = TRUE)
+cars_2020 = read.csv2("data/raw/demre/data-giorgio/oferta2020_202002292151.csv")
+#Replace some requirements and vacancies with 0 if they are NA
+cars_2020 %<>% mutate(VAC_1SEM = ifelse(is.na(VAC_1SEM), 0, VAC_1SEM),
+                      VAC_2SEM = ifelse(is.na(VAC_2SEM), 0, VAC_2SEM),
+                      SC_1SEM = ifelse(is.na(SC_1SEM), 0, SC_1SEM),
+                      SC_2SEM = ifelse(is.na(SC_2SEM), 0, SC_2SEM),
+                      PTJE_PONDERADO_MINIMO = ifelse(is.na(PTJE_PONDERADO_MINIMO), 0, PTJE_PONDERADO_MINIMO),
+                      PROM_MIN_LENG_MATE = ifelse(is.na(PROM_MIN_LENG_MATE), 0, PROM_MIN_LENG_MATE))
+dfs_reqs_2020_l =  merge(dfs_reqs_2020_l, cars_2020, by.x = "reqs_codigo", by.y = "CODIGO", all.x = TRUE)
 
 # Create varables
+table(dfs_reqs_2020_l$EXCLUYE_DESDE_PREF, useNA = "always")
 #NOTE: EXCLUYE_DESDE_PREF is NA when it doesn't restrict, but we donot do analysis for those programs
-table(dfs_reqs_2019_l$EXCLUYE_DESDE_PREF, useNA = "always")
-dfs_reqs_2019_l %<>% mutate(req_pref_value_correct = ifelse(EXCLUYE_DESDE_PREF    == req_pref_value, 1, 0),
+dfs_reqs_2020_l %<>% mutate(req_pref_value_correct = ifelse(EXCLUYE_DESDE_PREF    == req_pref_value, 1, 0),
                             req_ppm_value_correct  = ifelse(PTJE_PONDERADO_MINIMO == req_ppm_value, 1, 0),
                             req_plm_value_correct  = ifelse(PROM_MIN_LENG_MATE    == req_plm_value, 1, 0),
                             req_hycs_value         = ifelse(req_hycs_value == "Sí", "SI",
@@ -314,62 +325,61 @@ dfs_reqs_2019_l %<>% mutate(req_pref_value_correct = ifelse(EXCLUYE_DESDE_PREF  
                             req_plm_value_dist  = (PROM_MIN_LENG_MATE    - req_plm_value),
                             req_nvac_value_dist  = ((VAC_1SEM + VAC_2SEM)    - req_nvac_value))
 # Merge with preference and error dummies
-dfs_reqs_2019_l %<>% dplyr::rename(req_number = time)
-dfs_error_dumm_2019_l %<>% dplyr::rename(pref = time)
-dfs_reqs_2019_l = merge(dfs_reqs_2019_l, dfs_error_dumm_2019_l %>% select(!some_mistake),
+dfs_reqs_2020_l %<>% dplyr::rename(req_number = time)
+dfs_error_dumm_2020_l %<>% dplyr::rename(pref = time)
+dfs_reqs_2020_l = merge(dfs_reqs_2020_l, dfs_error_dumm_2020_l %>% select(!some_mistake),
                         by.x = c("ID", "reqs_codigo"), by.y = c("ID", "codigo_car"), all.x = TRUE)
 
 #Explore requisite's types
-#View(dfs_reqs_2019_l %>% select(PTJE_PONDERADO_MINIMO, req_ppm_value, req_ppm_value_correct) %>%
+#View(dfs_reqs_2020_l %>% select(PTJE_PONDERADO_MINIMO, req_ppm_value, req_ppm_value_correct) %>%
 #       filter(!is.na(req_ppm_value)))
 #NOTE: it seems that several students are confusing the PPM with the PLM with the last cutoffs
-#View(dfs_reqs_2019_l %>% select(PROM_MIN_LENG_MATE, req_plm_value, req_plm_value_correct) %>%
+#View(dfs_reqs_2020_l %>% select(PROM_MIN_LENG_MATE, req_plm_value, req_plm_value_correct) %>%
 #       filter(!is.na(req_plm_value)))
 #NOTE: several students get this wrong, because they answer the number where they applied to that program, or the next one
-#View(dfs_reqs_2019_l %>% select(EXCLUYE_DESDE_PREF, req_pref_value, req_pref_value_correct, pref) %>%
+#View(dfs_reqs_2020_l %>% select(EXCLUYE_DESDE_PREF, req_pref_value, req_pref_value_correct, pref) %>%
 #       filter(!is.na(req_pref_value)))
 
 # Histograms
 #NOTE: they might be responding garbage in the question of "Excluye desde preferencia"
-hist((dfs_reqs_2019_l %>% filter(!is.na(req_pref_value_correct)))$req_pref_value_dist)
-hist((dfs_reqs_2019_l %>% filter(!is.na(req_pref_value_correct)))$req_pref_value)
-#NOTE: here we have NAs for all programs that DO NOT restrict preference ranking
-hist((dfs_reqs_2019_l %>% filter(!is.na(req_pref_value_correct)))$EXCLUYE_DESDE_PREF)
-hist((dfs_reqs_2019_l %>% filter(!is.na(req_ppm_value_correct)))$req_ppm_value_dist)
-hist((dfs_reqs_2019_l %>% filter(!is.na(req_ppm_value_correct) & PTJE_PONDERADO_MINIMO > 0))$req_ppm_value_dist)
-hist((dfs_reqs_2019_l %>% filter(!is.na(req_plm_value_correct)))$req_plm_value_dist)
-hist((dfs_reqs_2019_l %>% filter(!is.na(req_nvac_value_correct)))$req_nvac_value_dist)
+hist((dfs_reqs_2020_l %>% filter(!is.na(req_pref_value_correct)))$req_pref_value_dist)
+hist((dfs_reqs_2020_l %>% filter(!is.na(req_pref_value_correct)))$req_pref_value)
+hist((dfs_reqs_2020_l %>% filter(!is.na(req_pref_value_correct)))$EXCLUYE_DESDE_PREF)
+hist((dfs_reqs_2020_l %>% filter(!is.na(req_ppm_value_correct)))$req_ppm_value_dist)
+hist((dfs_reqs_2020_l %>% filter(!is.na(req_ppm_value_correct) & PTJE_PONDERADO_MINIMO > 0))$req_ppm_value_dist)
+hist((dfs_reqs_2020_l %>% filter(!is.na(req_plm_value_correct)))$req_plm_value_dist)
+hist((dfs_reqs_2020_l %>% filter(!is.na(req_nvac_value_correct)))$req_nvac_value_dist)
 
-summarySE(data = dfs_reqs_2019_l,
+summarySE(data = dfs_reqs_2020_l,
           measurevar = "req_knows_pref",
           groupvars="error_dumm", na.rm=TRUE)
 
-summarySE(data = dfs_reqs_2019_l,
+summarySE(data = dfs_reqs_2020_l,
           measurevar = "req_knows_ppm",
           groupvars="error_dumm", na.rm=TRUE)
 
-summarySE(data = dfs_reqs_2019_l,
+summarySE(data = dfs_reqs_2020_l,
           measurevar = "req_knows_plm",
           groupvars="error_dumm", na.rm=TRUE)
 
-summarySE(data = dfs_reqs_2019_l,
+summarySE(data = dfs_reqs_2020_l,
           measurevar = "req_knows_nvac",
           groupvars="error_dumm", na.rm=TRUE)
 
-summarySE(data = dfs_reqs_2019_l,
+summarySE(data = dfs_reqs_2020_l,
           measurevar = "req_knows_cs",
           groupvars="error_dumm", na.rm=TRUE)
 
-summarySE(data = dfs_reqs_2019_l,
+summarySE(data = dfs_reqs_2020_l,
           measurevar = "req_knows_hycs",
           groupvars="error_dumm", na.rm=TRUE)
 
 # PLots
 # Knows correctly the preference exclusion
-dfs_reqs_2019_l %<>% mutate(error_dumm = ifelse(error_dumm == 1, "Yes",
+dfs_reqs_2020_l %<>% mutate(error_dumm = ifelse(error_dumm == 1, "Yes",
                                                 ifelse(error_dumm == 0, "No", NA)))
 # Plots
-ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_pref_value_correct)),
+ggplot(data = summarySE(data = dfs_reqs_2020_l %>% filter(!is.na(req_pref_value_correct)),
                  measurevar = "req_pref_value_correct",
                  groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -387,9 +397,9 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_pref_value_
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_pref_req_2019.pdf", width=5, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_pref_req_2020.pdf", width=5, height=5)
 
-ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(EXCLUYE_DESDE_PREF)),
+ggplot(data = summarySE(data = dfs_reqs_2020_l %>% filter(!is.na(EXCLUYE_DESDE_PREF)),
                  measurevar = "req_knows_pref",
                  groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -407,10 +417,10 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(EXCLUYE_DESDE_P
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_pref_req_2019.pdf", width=5, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_pref_req_2020.pdf", width=5, height=5)
 
 # Knows correctly the puntaje minimo ponderado
-ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_ppm_value_correct)  & PTJE_PONDERADO_MINIMO > 0),
+ggplot(data = summarySE(data = dfs_reqs_2020_l %>% filter(!is.na(req_ppm_value_correct)  & PTJE_PONDERADO_MINIMO > 0),
                         measurevar = "req_ppm_value_correct",
                         groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -428,9 +438,9 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_ppm_value_c
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_ppm_req_2019.pdf", width=5, height=5)# Knows correctly the puntaje minimo ponderado
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_ppm_req_2020.pdf", width=5, height=5)# Knows correctly the puntaje minimo ponderado
 
-ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(PTJE_PONDERADO_MINIMO > 0),
+ggplot(data = summarySE(data = dfs_reqs_2020_l %>% filter(PTJE_PONDERADO_MINIMO > 0),
                         measurevar = "req_knows_ppm",
                         groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -448,10 +458,10 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(PTJE_PONDERADO_MINIMO 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_ppm_req_2019.pdf", width=5, height=5)# Knows correctly the puntaje minimo ponderado
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_ppm_req_2020.pdf", width=5, height=5)# Knows correctly the puntaje minimo ponderado
 
 # Knows correctly the puntaje promedio lenguage matematica
-ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_plm_value_correct)),
+ggplot(data = summarySE(data = dfs_reqs_2020_l %>% filter(!is.na(req_plm_value_correct)),
                         measurevar = "req_plm_value_correct",
                         groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -469,9 +479,9 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_plm_value_c
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_plm_req_2019.pdf", width=5, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_plm_req_2020.pdf", width=5, height=5)
 
-ggplot(data = summarySE(data = dfs_reqs_2019_l,
+ggplot(data = summarySE(data = dfs_reqs_2020_l,
                         measurevar = "req_knows_plm",
                         groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -489,10 +499,10 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l,
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_plm_req_2019.pdf", width=5, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_plm_req_2020.pdf", width=5, height=5)
 
 # Knows correctly the requires history or social sciences
-ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_hycs_value_correct)),
+ggplot(data = summarySE(data = dfs_reqs_2020_l %>% filter(!is.na(req_hycs_value_correct)),
                         measurevar = "req_hycs_value_correct",
                         groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -510,9 +520,9 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_hycs_value_
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_hycs_req_2019.pdf", width=5, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_hycs_req_2020.pdf", width=5, height=5)
 
-ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(exige_hycs == "SI"),
+ggplot(data = summarySE(data = dfs_reqs_2020_l %>% filter(exige_hycs == "SI"),
                         measurevar = "req_knows_hycs",
                         groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -530,10 +540,10 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(exige_hycs == "SI"),
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_hycs_req_2019.pdf", width=5, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_hycs_req_2020.pdf", width=5, height=5)
 
 # Knows correctly the exige ciencias
-ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_cs_value_correct)),
+ggplot(data = summarySE(data = dfs_reqs_2020_l %>% filter(!is.na(req_cs_value_correct)),
                         measurevar = "req_cs_value_correct",
                         groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -551,9 +561,9 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_cs_value_co
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_cs_req_2019.pdf", width=5, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_cs_req_2020.pdf", width=5, height=5)
 
-ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(exige_cien == "SI"),
+ggplot(data = summarySE(data = dfs_reqs_2020_l %>% filter(exige_cien == "SI"),
                         measurevar = "req_knows_cs",
                         groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -571,10 +581,10 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(exige_cien == "SI"),
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_cs_req_2019.pdf", width=5, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_cs_req_2020.pdf", width=5, height=5)
 
 # Knows correctly the number of vacancies
-ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_nvac_value_correct)),
+ggplot(data = summarySE(data = dfs_reqs_2020_l %>% filter(!is.na(req_nvac_value_correct)),
                         measurevar = "req_nvac_value_correct",
                         groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -592,9 +602,9 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l %>% filter(!is.na(req_nvac_value_
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_nvac_req_2019.pdf", width=5, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_correct_nvac_req_2020.pdf", width=5, height=5)
 
-ggplot(data = summarySE(data = dfs_reqs_2019_l,
+ggplot(data = summarySE(data = dfs_reqs_2020_l,
                         measurevar = "req_knows_nvac",
                         groupvars="error_dumm", na.rm=TRUE),
        aes(x = as.factor(error_dumm), fill = as.factor(error_dumm))) +
@@ -612,7 +622,7 @@ ggplot(data = summarySE(data = dfs_reqs_2019_l,
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank()) +
   ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_nvac_req_2019.pdf", width=5, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_nvac_req_2020.pdf", width=5, height=5)
 
 
 #TODO: Run a regression predicting the correct knowledge (or knowledge) for some requirements by the preference
@@ -622,20 +632,26 @@ ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knows_nvac_req
 # Characterizing reported preferences and beliefs ----------------------------------
 
 #Create application types
-dfs_2019 %<>% mutate(short_list = ifelse(n_apps < 10, 1, 0))
-dfs_2019 %<>% mutate(short_list_lab = ifelse(n_apps < 10, "Short-list", "Full-list"))
+dfs_2020 %<>% mutate(short_list = ifelse(n_apps < 10, 1, 0))
+dfs_2020 %<>% mutate(short_list_lab = ifelse(n_apps < 10, "Short-list", "Full-list"))
+table(dfs_2020$short_list_lab, useNA = "always")
 
 # Truthteller: Most preferred is top-reported preference
-dfs_2019 %<>% mutate(truth_teller = ifelse(mp_carr == COD_CARRERA_PREF_01, 1, 0))
+dfs_2020 %<>% mutate(truth_teller = ifelse(mp_carr == COD_CARRERA_PREF_01, 1, 0))
+table(dfs_2020$truth_teller, useNA = "always")
+dfs_2020 %<>% mutate(truth_teller = ifelse(is.na(truth_teller), 0, truth_teller))
 
 # Misreporting excluding: Most preferred is not in the application list
-dfs_2019 %<>% mutate(misreport_exclude = ifelse(applied_to_mp == 0, 1, 0))
+# NOTE: we are also here including students with top-true prefs outside the system, so we have to filter them later
+dfs_2020 %<>% mutate(misreport_exclude = ifelse(applied_to_mp == 0, 1, 0))
+table(dfs_2020$misreport_exclude, useNA = "always")
 
 # Misreporting ordering: Most preferred is in the application list but not in the first choice
-dfs_2019 %<>% mutate(misreport_order = ifelse((applied_to_mp == 1) & (truth_teller != 1), 1, 0))
+dfs_2020 %<>% mutate(misreport_order = ifelse((applied_to_mp == 1) & (truth_teller != 1), 1, 0))
+table(dfs_2020$misreport_order, useNA = "always")
 
 # In which reported preference the student included the mp carr?
-dfs_2019 %<>% mutate(pref_mp = ifelse(applied_to_mp == 0, 0,
+dfs_2020 %<>% mutate(pref_mp = ifelse(applied_to_mp == 0, 0,
                                             ifelse(COD_CARRERA_PREF_01 == mp_carr, 1,
                                                    ifelse(COD_CARRERA_PREF_02 == mp_carr, 2,
                                                           ifelse(COD_CARRERA_PREF_03 == mp_carr, 3,
@@ -649,31 +665,31 @@ dfs_2019 %<>% mutate(pref_mp = ifelse(applied_to_mp == 0, 0,
 
 
 # Most preferred is program of assignment
-dfs_2019 %<>% mutate(assigned_to_mp = ifelse(assigned_to == mp_carr, 1, 0))
-dfs_2019 %<>% mutate(assigned_above_mp = ifelse((assigned_pref < pref_mp) &
+dfs_2020 %<>% mutate(assigned_to_mp = ifelse(assigned_to == mp_carr, 1, 0))
+table(dfs_2020$assigned_to_mp, useNA = "always")
+dfs_2020 %<>% mutate(assigned_above_mp = ifelse((assigned_pref < pref_mp) &
                                                         (assigned_pref != 0) &
                                                         (pref_mp != 0), 1, 0))
+table(dfs_2020$pref_mp, is.na(dfs_2020$mp_carr), useNA = "always")
+#NOTE: be careful with this variable, it encodes as 0 when mp_carr is NA
+table(dfs_2020$assigned_above_mp, useNA = "always")
 #NOTE: filter to have only students with the version of the paid program question
-dfs_2019_money = dfs_2019 %>% filter((rand_money == 1))
+dfs_2020_money = dfs_2020 %>% filter((rand_money == 1))
 #NOTE: there are students who declare as an ideal program a reported preference below the top one
-table(dfs_2019_money$pref_mp, useNA = "always")
-table(dfs_2019_money$pref_mp, dfs_2019_money$assigned_to_mp)
-#NOTE: from the fraction of students who misreport the order, half of them gets assigned to a higher ranked pref
-# and half gets assigned to a lower-ranked pref
-table(dfs_2019_money$assigned_above_mp, dfs_2019_money$misreport_order)
-#NOTE: we need the survey of 2020 to dig deeper in why students missreport
+table(dfs_2020_money$pref_mp, useNA = "always")
+table(dfs_2020_money$pref_mp, dfs_2020_money$assigned_to_mp)
 
 #Checks
-#View(dfs_2019_money %>%
+#View(dfs_2020_money %>%
 #       select(mp_carr, COD_CARRERA_PREF_01,  applied_to_mp, assigned_to,
 #              truth_teller, misreport_exclude, misreport_order))
 
 # Create categorical variable
-dfs_2019 %<>% mutate(application_type = ifelse(truth_teller == 1, "Truth-teller",
+dfs_2020 %<>% mutate(application_type = ifelse(truth_teller == 1, "Truth-teller",
                                                      ifelse(misreport_exclude == 1, "Misreporting Exclusion",
                                                             ifelse(misreport_order == 1, "Misreporting Ordering", NA))))
 # Application types (paid)
-ggplot(dfs_2019 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)),
+ggplot(dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)),
        aes(x = short_list_lab, fill = application_type)) +
   geom_bar(position = position_dodge(width = 0.9),
            alpha = alpha,
@@ -692,12 +708,18 @@ ggplot(dfs_2019 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_mo
   #theme_bw() +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/application_types_2019.pdf", width=10, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/application_types_2020.pdf", width=10, height=5)
+#TODO: this graph also changes in the numbers, but all patterns remain, the fraction of truthtellers increases 
+# with respct to 2019. There could be several potential reasons for this. First, in 2019 we had the
+# "Chilean revolution" this could generate more uncertainty and motivate to rely less on previous year cutoffs
+# decreasing the self-selection pattern in the misreporting types. Otras razones similares pueden estar relacionadas
+# con la probea de Historia
+
 
 # Application types (free)
 #NOTE: there are no big differences in the aggregate level of application types by whether they got the free
 # or the paid version of the question
-ggplot(dfs_2019 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 0)),
+ggplot(dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 0)),
        aes(x = short_list_lab, fill = application_type)) +
   geom_bar(position = position_dodge(width = 0.9),
            alpha = alpha,
@@ -716,41 +738,346 @@ ggplot(dfs_2019 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_mo
   #theme_bw() +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/application_types_free_2019.pdf", width=10, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/application_types_free_2020.pdf", width=10, height=5)
+
+
+
+# Cleaning inconsistent responses -----------------------------------------
+
+#Now explaining the reasons for this behavior
+cro_cpct((dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$reason_strategic_1,
+         (dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$application_type)
+cro_cpct((dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$reason_strategic_2,
+         (dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$application_type)
+cro_cpct((dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$reason_strategic_3,
+         (dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$application_type)
+cro_cpct((dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$reason_strategic_4,
+         (dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$application_type)
+cro_cpct((dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$reason_strategic_5,
+         (dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$application_type)
+cro_cpct((dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$reason_strategic_6,
+         (dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$application_type)
+cro_cpct((dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$reason_strategic_7,
+         (dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$application_type)
+cro_cpct((dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$reason_strategic_8,
+         (dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)))$application_type)
+#cro_cpct((dfs_2020 %>% filter(!is.na(application_type) & (rand_money == 1)))$reason_strategic_other,
+#         (dfs_2020 %>% filter(!is.na(application_type) & (rand_money == 1)))$application_type)
+
+# Translate labels of reasons to English (not an exact translation)
+#TODO: talk to Nacho to checkif he agrees with these free-style translations
+dfs_2020 %<>% mutate(reason_strategic_1 = ifelse(reason_strategic_1 == "SÍ, postulé a mi carrera ideal en mi primera preferencia.",
+                                                 "(a) YES, I did apply to my ideal program as a top-reported preference", ""),
+                     reason_strategic_2 = ifelse(reason_strategic_2 == "La probabilidad de que quede seleccionado en esa carrera es muy baja.",
+                                                 "(b) My admission probability to that program is too low", ""),
+                     reason_strategic_3 = ifelse(reason_strategic_3 == "La carrera me parece demasiado difícil y no creo que vaya a terminarla en caso de matricularme.",
+                                                 "(c) The program is too hard and I don't think I would be able to graduate from it", ""),
+                     reason_strategic_4 = ifelse(reason_strategic_4 == "No tengo los recursos económicos para pagar el costo de la carrera.",
+                                                 "(d) I do not have the monetary resources to pay for the program", ""),
+                     reason_strategic_5 = ifelse(reason_strategic_5 == "Para incluir mi carrera ideal tendría que excluir alguna de las carreras de mi postulación.",
+                                                 "(e) To include my ideal program, I would have to exclude some program from my list", ""),                     
+                     reason_strategic_6 = ifelse(reason_strategic_6 == "La decisión de dónde postular no dependió completamente de mí, y fue influenciada por otras personas (familia, amigos u otros).",
+                                                 "(f) The decision to where to apply did not depend only on me, and it was influenced by other people (family, friends, etc.)", ""),                     
+                     reason_strategic_7 = ifelse(reason_strategic_7 == "Pensé que al incluir esta carrera en mi lista de preferencias habría reducido mis posibilidades de admisión en las demás carreras.",
+                                                 "(g) I thought that by including this program in my list I would have reduced my chances of being admitted to the other listed programs", ""),                     
+                     reason_strategic_8 = ifelse(reason_strategic_8 == "Dado que mi probabilidad de admisión es muy baja, prefiero no postular y quedar seleccionado en una preferencia reportada más alta.",
+                                                 "(h) Given that my admission chances are too low, I prefer to do not list this program and being assigned to a higher reported preference", ""))                     
+                     
+# Create variable to identify inconsistent answers to the survey
+dfs_2020 %<>% mutate(inconsistent_type = 0)
+dfs_2020 %<>% mutate(inconsistent_type = ifelse((((reason_strategic_1 == "") | (reason_strategic_3 != "") | (reason_strategic_4 != "")) & (truth_teller == 1)), 1, inconsistent_type))
+dfs_2020 %<>% mutate(inconsistent_type = ifelse(((reason_strategic_1 != "") | (reason_strategic_3 != "") | (reason_strategic_4 != "")) & (misreport_order == 1), 1, inconsistent_type))
+dfs_2020 %<>% mutate(inconsistent_type = ifelse(((reason_strategic_1 != "") | (reason_strategic_3 != "") | (reason_strategic_4 != "")) & (misreport_exclude == 1), 1, inconsistent_type))
+
+cro_cpct((dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)))$reason_strategic_1,
+         (dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)))$application_type)
+
+cro_cpct((dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)))$reason_strategic_8,
+         (dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)))$application_type)
+
+# Application types (paid)
+ggplot(dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)),
+       aes(x = short_list_lab, fill = application_type)) +
+  geom_bar(position = position_dodge(width = 0.9),
+           alpha = alpha,
+           aes(y = 100*(..count..)/tapply(..count.., ..x.. ,sum)[..x..])) +
+  geom_text(position = position_dodge(width = 0.9),
+            aes(group = application_type,
+                label = round(100*(..count..)/tapply(..count.., ..x.. ,sum)[..x..],2),
+                y= 100*(..count..)/tapply(..count.., ..x.. ,sum)[..x..]),
+            stat= "count",
+            vjust = +1.5) +
+  xlab("Application type") +
+  ylab("Percentage") +
+  scale_fill_brewer(palette="Pastel1",
+                    name="Types") +
+  #facet_wrap(~as.factor(short_list)) +
+  #theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank())
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/application_types_consistent_2020.pdf", width=10, height=5)
+
+
+# Getting table for raw answers before filtering insconsistent responses
+
+#NOTE: we need the survey of 2020 to dig deeper in why students missreport
+table_appp_types_total = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)) %>%
+  group_by(application_type) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>%
+  select(application_type, n)
+table_appp_types_r1 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)) %>%
+  group_by(application_type, reason_strategic_1) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_1 != "") %>%
+  dplyr::rename(reason = reason_strategic_1) %>% 
+  select(!n)
+table_appp_types_r2 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)) %>%
+  group_by(application_type, reason_strategic_2) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_2 != "") %>%
+  dplyr::rename(reason = reason_strategic_2) %>% 
+  select(!n)
+table_appp_types_r3 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)) %>%
+  group_by(application_type, reason_strategic_3) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_3 != "") %>%
+  dplyr::rename(reason = reason_strategic_3) %>% 
+  select(!n)
+table_appp_types_r4 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)) %>%
+  group_by(application_type, reason_strategic_4) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_4 != "") %>%
+  dplyr::rename(reason = reason_strategic_4) %>% 
+  select(!n)
+table_appp_types_r5 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)) %>%
+  group_by(application_type, reason_strategic_5) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_5 != "") %>%
+  dplyr::rename(reason = reason_strategic_5) %>% 
+  select(!n)
+table_appp_types_r6 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)) %>%
+  group_by(application_type, reason_strategic_6) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_6 != "") %>%
+  dplyr::rename(reason = reason_strategic_6) %>% 
+  select(!n)
+table_appp_types_r7 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)) %>%
+  group_by(application_type, reason_strategic_7) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_7 != "") %>%
+  dplyr::rename(reason = reason_strategic_7) %>% 
+  select(!n)
+table_appp_types_r8 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)) %>%
+  group_by(application_type, reason_strategic_8) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_8 != "") %>%
+  dplyr::rename(reason = reason_strategic_8) %>% 
+  select(!n)
+table_appp_types_rother = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1)) %>%
+  mutate(reason_strategic_other_bool = ifelse(reason_strategic_other != "", "Other", "")) %>% 
+  group_by(application_type, reason_strategic_other_bool) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>%
+  filter(reason_strategic_other_bool != "") %>%
+  dplyr::rename(reason = reason_strategic_other_bool) %>% 
+  select(!n)
+# Join tables
+table_appp_types_reasons = rbind(table_appp_types_r1, table_appp_types_r2, table_appp_types_r3, 
+                                 table_appp_types_r4, table_appp_types_r5, table_appp_types_r6, 
+                                 table_appp_types_r7, table_appp_types_r8, table_appp_types_rother)
+table_appp_types_reasons_exclusion = table_appp_types_reasons %>% subset(application_type == "Misreporting Exclusion")
+table_appp_types_reasons_ordering = table_appp_types_reasons %>% subset(application_type == "Misreporting Ordering")
+table_appp_types_reasons_truthteller = table_appp_types_reasons %>% subset(application_type == "Truth-teller")
+
+# Write the latex table 
+
+#Write latex table by hand
+table_latex_file = file("mistakes_and_warnings/documents/draft/tables/reasons_misreporting_2020.tex")
+table_header = c("\\begin{table}[htbp!]",
+                 "\\centering",
+                 "\\caption{Reasons for misreporting}",
+                 "\\label{tab:reasons_misreporting}",
+                 "\\scalebox{0.7}{",
+                 "\\begin{tabular}{p{0.7\\textwidth}ccc}",
+                 "\\toprule",
+                 "\\toprule")
+table_columns = paste("Application type",
+                      "\\makecell[c]{Misreporting \\\\ Exclusion [\\%]}",
+                      "\\makecell[c]{Misreporting \\\\ Ordering [\\%]}", 
+                      "\\makecell[c]{Truth-teller  [\\%]}", 
+                      sep = " & ")
+table_body = paste(table_columns, "\\\\" ," \\midrule")
+space = '\\\\[0pt]'
+table_body = paste(table_body, "Reasons", space)
+#Fill table body
+for(i in 1:nrow(table_appp_types_reasons_exclusion)){
+  row = paste(table_appp_types_reasons_exclusion[i,2], "&", round(table_appp_types_reasons_exclusion[i,3],2),
+              "&", round(table_appp_types_reasons_ordering[i,3],2), "&", 
+              round(table_appp_types_reasons_truthteller[i,3],2), sep="")
+  row = paste(row, space)
+  table_body = c(table_body, row)
+}
+# Add total
+row_total = paste("Total", "&", table_appp_types_total[1,2], "&", table_appp_types_total[2,2],
+                  "&", table_appp_types_total[3,2], sep="")
+row_total = paste(row_total, space)
+table_body = c(table_body, "\\midrule", row_total)
+
+table_footer = c("\\bottomrule",
+                 "\\multicolumn{4}{l}{\\textit{Note:} respondents can choose multiple reasons.}",
+                 "\\end{tabular}",
+                 "}",
+                 "\\end{table}")
+table_latex_code = c(table_header, table_body, table_footer)
+writeLines(table_latex_code, table_latex_file)
+close(table_latex_file)
+
+# Doing the same but only with consistent responses
+#NOTE: from the fraction of students who misreport the order, 60% of them gets assigned to a higher ranked pref
+# and half gets assigned to a lower-ranked pref
+dfs_2020 %>% filter(rand_money == 1 & !is.na(mp_carr) & inconsistent_type == 0 & misreport_order == 1) %>% 
+  group_by(assigned_above_mp) %>% 
+  tally() %>%
+  mutate(freq = 100*n / sum(n))
+
+#NOTE: we need the survey of 2020 to dig deeper in why students missreport
+table_appp_types_total = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)) %>%
+  group_by(application_type) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>%
+  select(application_type, n)
+table_appp_types_r2 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)) %>%
+  group_by(application_type, reason_strategic_2) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_2 != "") %>%
+  dplyr::rename(reason = reason_strategic_2) %>% 
+  select(!n)
+table_appp_types_r5 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)) %>%
+  group_by(application_type, reason_strategic_5) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_5 != "") %>%
+  dplyr::rename(reason = reason_strategic_5) %>% 
+  select(!n)
+table_appp_types_r6 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)) %>%
+  group_by(application_type, reason_strategic_6) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_6 != "") %>%
+  dplyr::rename(reason = reason_strategic_6) %>% 
+  select(!n)
+table_appp_types_r7 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)) %>%
+  group_by(application_type, reason_strategic_7) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_7 != "") %>%
+  dplyr::rename(reason = reason_strategic_7) %>% 
+  select(!n)
+table_appp_types_r8 = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)) %>%
+  group_by(application_type, reason_strategic_8) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_8 != "") %>%
+  dplyr::rename(reason = reason_strategic_8) %>% 
+  select(!n)
+table_appp_types_rother = dfs_2020 %>% filter(!is.na(application_type) & !is.na(mp_carr) & (rand_money == 1) & (inconsistent_type == 0)) %>%
+  mutate(reason_strategic_other_bool = ifelse(reason_strategic_other != "", "Other", "")) %>% 
+  group_by(application_type, reason_strategic_other_bool) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>%
+  filter(reason_strategic_other_bool != "") %>%
+  dplyr::rename(reason = reason_strategic_other_bool) %>% 
+  select(!n)
+# Join tables
+table_appp_types_reasons = rbind(table_appp_types_r2, table_appp_types_r5, table_appp_types_r6, table_appp_types_r7,
+                                 table_appp_types_r8, table_appp_types_rother)
+table_appp_types_reasons_exclusion = table_appp_types_reasons %>% subset(application_type == "Misreporting Exclusion")
+table_appp_types_reasons_ordering = table_appp_types_reasons %>% subset(application_type == "Misreporting Ordering")
+
+# Write the latex table 
+
+#Write latex table by hand
+table_latex_file = file("mistakes_and_warnings/documents/draft/tables/reasons_misreporting_consistent_2020.tex")
+table_header = c("\\begin{table}[htbp!]",
+                 "\\centering",
+                 "\\caption{Reasons for misreporting (consistent responses)}",
+                 "\\label{tab:reasons_misreporting_consistent}",
+                 "\\scalebox{0.7}{",
+                 "\\begin{tabular}{p{0.7\\textwidth}ccc}",
+                 "\\toprule",
+                 "\\toprule")
+table_columns = paste("Application type",
+                      "\\makecell[c]{Misreporting \\\\ Exclusion [\\%]}",
+                      "\\makecell[c]{Misreporting \\\\ Ordering [\\%]}", 
+                      "\\makecell[c]{Truth-teller  [\\%]}", 
+                      sep = " & ")
+table_body = paste(table_columns, "\\\\" ," \\midrule")
+space = '\\\\[0pt]'
+table_body = paste(table_body, "Reasons", space)
+#Fill table body
+for(i in 1:nrow(table_appp_types_reasons_exclusion)){
+  row = paste(table_appp_types_reasons_exclusion[i,2], "&", round(table_appp_types_reasons_exclusion[i,3],2),
+              "&", round(table_appp_types_reasons_ordering[i,3],2), "&", "-", sep="")
+  row = paste(row, space)
+  table_body = c(table_body, row)
+}
+# Add total
+row_total = paste("Total", "&", table_appp_types_total[1,2], "&", table_appp_types_total[2,2],
+                  "&", table_appp_types_total[3,2], sep="")
+row_total = paste(row_total, space)
+table_body = c(table_body, "\\midrule", row_total)
+
+table_footer = c("\\bottomrule",
+                 "\\multicolumn{4}{l}{\\textit{Note:} respondents can choose multiple reasons. Percentages are computed among the fraction of consistent respondents.}",
+                 "\\end{tabular}",
+                 "}",
+                 "\\end{table}")
+table_latex_code = c(table_header, table_body, table_footer)
+writeLines(table_latex_code, table_latex_file)
+close(table_latex_file)
 
 
 
 # Beliefs -----------------------------------------------------------------
 
 # Admissibility mistakes and beliefs or top-reported preference
-#View(dfs_2019 %>% select(prob_first, prob_1, prob_err_1))
-
+#View(dfs_2020 %>% select(prob_first, prob_1, prob_err_1))
 
 # Histogram for admission probability conditional on making an admissibility mistake
-dfs_2019 %<>% mutate(bias_top_pref_mistake = ifelse(error_dumm_1 == 1, prob_first, NA))
+dfs_2020 %<>% mutate(bias_top_pref_mistake = ifelse(error_dumm_1 == 1, prob_first, NA))
 # Consistency in probabilities of admission for students with a valid top preference
-dfs_2019 %<>% mutate(inconsistency_probs_top_choice = ifelse(error_dumm_1 == 0, prob_first - prob_1, NA))
+dfs_2020 %<>% mutate(inconsistency_probs_top_choice = ifelse(error_dumm_1 == 0, prob_first - prob_1, NA))
 
-
-ggplot(dfs_2019 %>% filter(error_dumm_1 == 1),
+ggplot(dfs_2020 %>% filter(error_dumm_1 == 1),
        aes(x = bias_top_pref_mistake)) +
   geom_density()
 
 # Long version to get all subjective beliefs
 # Reshape data to long
-dfs_beliefs_2019_w = dfs_2019 %>% select(
+dfs_beliefs_2020_w = dfs_2020 %>% select(
   starts_with("prob_"),
   starts_with("scores_"),
   starts_with("error_dumm"),
   starts_with("COD_CARRERA_PREF_"),
   starts_with("nw_"),
-  n_apps, ID, some_mistake) %>% select(!prob_first)
+  n_apps, ID, some_mistake, inconsistent_type) %>% select(!prob_first)
 
-dfs_beliefs_2019_l = reshape(dfs_beliefs_2019_w,
+dfs_beliefs_2020_l = reshape(dfs_beliefs_2020_w,
                              direction='long',
                              varying=list(
                                c('prob_1','prob_2','prob_3','prob_4','prob_5','prob_6','prob_7','prob_8','prob_9','prob_10'),
                                c('prob_err_1','prob_err_2','prob_err_3','prob_err_4','prob_err_5','prob_err_6','prob_err_7','prob_err_8','prob_err_9','prob_err_10'),
+                               c('prob_remain_1','prob_remain_2','prob_remain_3','prob_remain_4','prob_remain_5','prob_remain_6','prob_remain_7','prob_remain_8','prob_remain_9','prob_remain_10'),
                                c('scores_carr1','scores_carr2','scores_carr3','scores_carr4','scores_carr5','scores_carr6','scores_carr7','scores_carr8','scores_carr9','scores_carr10'),
                                c('error_dumm_1','error_dumm_2','error_dumm_3','error_dumm_4','error_dumm_5','error_dumm_6','error_dumm_7','error_dumm_8','error_dumm_9','error_dumm_10'),
                                c('COD_CARRERA_PREF_01','COD_CARRERA_PREF_02','COD_CARRERA_PREF_03','COD_CARRERA_PREF_04','COD_CARRERA_PREF_05','COD_CARRERA_PREF_06','COD_CARRERA_PREF_07','COD_CARRERA_PREF_08','COD_CARRERA_PREF_09','COD_CARRERA_PREF_10'),
@@ -760,23 +1087,24 @@ dfs_beliefs_2019_l = reshape(dfs_beliefs_2019_w,
                              v.names=c(
                                'prob',
                                'prob_err',
+                               'prob_remain',
                                'scores_carr',
                                'error_dumm',
                                'codigo_car',
                                'nw'),
-                             idvar=c('ID','n_apps','some_mistake'))
+                             idvar=c('ID','n_apps','some_mistake','inconsistent_type'))
 
-dfs_beliefs_2019_l %<>% dplyr::rename(pref = time)
+dfs_beliefs_2020_l %<>% dplyr::rename(pref = time)
 # Drop extra rows for programs where the student didn't apply to
-dfs_beliefs_2019_l %<>% filter(codigo_car != 0)
+dfs_beliefs_2020_l %<>% filter(codigo_car != 0)
 
 # PDF for subjective beliefs by preference of assignment
-ggplot(dfs_beliefs_2019_l %>% filter(error_dumm == 0 & pref %in% c(1,4,8)),
+ggplot(dfs_beliefs_2020_l %>% filter(error_dumm == 0 & pref %in% c(1,4,8)),
        aes(x = prob, colour = as.factor(pref))) +
   stat_ecdf()
 
 # Densities for subjective beliefs by preference of assignment
-ggplot(dfs_beliefs_2019_l %>% filter(error_dumm == 0 & pref %in% c(1,4)),
+ggplot(dfs_beliefs_2020_l %>% filter(error_dumm == 0 & pref %in% c(1,4) & inconsistent_type == 1),
        aes(x = prob, fill = as.factor(pref))) +
   geom_density(alpha = alpha) +
   xlab("Subjective beliefs") +
@@ -787,10 +1115,9 @@ ggplot(dfs_beliefs_2019_l %>% filter(error_dumm == 0 & pref %in% c(1,4)),
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/densities_subj_beliefs_2019.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/densities_subj_beliefs_2020.pdf", width=7, height=5)
 
-
-table_beliefs = dfs_beliefs_2019_l %>% filter(error_dumm == 0) %>%
+table_beliefs = dfs_beliefs_2020_l %>% filter(error_dumm == 0) %>%
   group_by(pref, n_apps) %>%
   summarise(mean_belief = mean(prob))
 
@@ -809,19 +1136,19 @@ library("see")
 colnames(beliefs_mean_mat) <- paste( rep("L",10) , c(1:10) , sep="")
 rownames(beliefs_mean_mat) <- paste( rep("P",10) , c(1:10) , sep="")
 #TODO: Fix the saving
-pdf(file="mistakes_and_warnings/code/R/analysis mistakes/plots/heatmap_sb_beliefs_2019.pdf", width=7, height=5)
+pdf(file="mistakes_and_warnings/code/R/analysis mistakes/plots/heatmap_sb_beliefs_2020.pdf", width=7, height=5)
 p = levelplot(t(beliefs_mean_mat), xlab = "Application length", ylab = "Preference",
               at = 40:90)
 p
 dev.off()
 
 
-table_scores = dfs_beliefs_2019_l %>% filter(error_dumm == 0) %>%
+table_scores = dfs_beliefs_2020_l %>% filter(error_dumm == 0) %>%
   group_by(n_apps) %>%
   summarise(mean_scores = mean(scores_carr))
 
 # Average score by application length
-ggplot(data = summarySE(data = dfs_beliefs_2019_l %>% filter(error_dumm == 0),
+ggplot(data = summarySE(data = dfs_beliefs_2020_l %>% filter(error_dumm == 0),
                         measurevar = "scores_carr",
                         groupvars="n_apps", na.rm=TRUE),
        aes(x = as.factor(n_apps))) +
@@ -839,13 +1166,13 @@ ggplot(data = summarySE(data = dfs_beliefs_2019_l %>% filter(error_dumm == 0),
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
   #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/averge_score_by_app_length_2019.pdf", width=5, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/averge_score_by_app_length_2020.pdf", width=5, height=5)
 
 
 # Distribution of scores by application length
-dfs_beliefs_2019_l %<>% mutate(scores_carr_standard = (scores_carr - mean(scores_carr))/sd(scores_carr))
+dfs_beliefs_2020_l %<>% mutate(scores_carr_standard = (scores_carr - mean(scores_carr, na.rm = TRUE))/sd(scores_carr, na.rm = TRUE))
 
-ggplot(data = dfs_beliefs_2019_l %>% filter(error_dumm == 0),
+ggplot(data = dfs_beliefs_2020_l %>% filter(error_dumm == 0),
        aes(x = as.factor(n_apps), y = scores_carr_standard, fill = as.factor(n_apps))) +
   geom_violinhalf(alpha = alpha, trim=FALSE, orientation = "x") +
   geom_boxplot(width=0.1, fill="white")+
@@ -857,36 +1184,36 @@ ggplot(data = dfs_beliefs_2019_l %>% filter(error_dumm == 0),
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/violin_score_by_app_length_2019.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/violin_score_by_app_length_2020.pdf", width=7, height=5)
 
 # Checks
-ggplot(dfs_2019 %>% filter(error_dumm_1 == 0),
-       aes(x = inconsistency_probs_top_choice, fill = BEA)) +
+ggplot(dfs_2020 %>% filter(error_dumm_1 == 0 & BEA == "No BEA"),
+       aes(x = inconsistency_probs_top_choice)) +
   geom_density(alpha = alpha)
 
-table((dfs_2019 %>% filter(error_dumm_1 == 0))$inconsistency_probs_top_choice)
+hist((dfs_2020 %>% filter(error_dumm_1 == 0 & BEA == "No BEA"))$inconsistency_probs_top_choice)
 
-sum((dfs_2019 %>% filter(error_dumm_1 == 0 & BEA == "No BEA"))$inconsistency_probs_top_choice >= -10 &
-      (dfs_2019 %>% filter(error_dumm_1 == 0 & BEA == "No BEA"))$inconsistency_probs_top_choice <= 10)/nrow((dfs_2019 %>% filter(error_dumm_1 == 0 & BEA == "No BEA")))
+#TODO: decide what to do with individuals who are inconsistent with what they declare for both probabilities
+mean((dfs_2020 %>% filter(error_dumm_1 == 0 & BEA == "No BEA"))$inconsistency_probs_top_choice < -25 |
+      (dfs_2020 %>% filter(error_dumm_1 == 0 & BEA == "No BEA"))$inconsistency_probs_top_choice >= 25)
 
 # Ratex beliefs and bias --------------------------------------------------
 
 #Loading Ratex beliefs by application lists
-#ratex_2018 = read.csv2(file = "data/interim/ratexs-2018.csv", sep=",", header = TRUE)
-ratex_2019 = read.csv2(file = "data/interim/ratexs-2019.csv", sep=",", header = TRUE)
-#ratex_mp_2018 = read.csv2(file = "data/interim/mp-ratexs-2018.csv", sep=",", header = TRUE)
-ratex_mp_2019 = read.csv2(file = "data/interim/mp-ratexs-2019.csv", sep=",", header = TRUE)
+#ratex_2019 = read.csv2(file = "data/interim/ratexs-2019.csv", sep=",", header = TRUE)
+ratex_2020 = read.csv2(file = "data/interim/ratexs-2020.csv", sep=",", header = TRUE)
+#ratex_mp_2019 = read.csv2(file = "data/interim/mp-ratexs-2019.csv", sep=",", header = TRUE)
+ratex_mp_2020 = read.csv2(file = "data/interim/mp-ratexs-2020.csv", sep=",", header = TRUE)
 
 #Merge ratex to the survey panel long with subjective beliefs
-dfs_beliefs_2019_l = merge(dfs_beliefs_2019_l, ratex_2019,
+dfs_beliefs_2020_l = merge(dfs_beliefs_2020_l, ratex_2020,
                            by.x = c("ID","pref"), by.y = c("id","rank"), all.x = TRUE)
-dfs_beliefs_2019_l %<>% mutate(ratex = 100*as.numeric(as.character(ratex_2019)),
-                               adaptive = 100*as.numeric(as.character(ratex_2018)))
-#dfs_beliefs_2019_l %<>% mutate(ratex = 100*as.numeric(as.character(ratex)))
-
+dfs_beliefs_2020_l %<>% mutate(ratex = 100*as.numeric(as.character(ratex_2020)),
+                               adaptive = 100*as.numeric(as.character(ratex_2019)))
+#dfs_beliefs_2020_l %<>% mutate(ratex = 100*as.numeric(as.character(ratex)))
 
 # Densities for subjective beliefs by preference of assignment
-ggplot(dfs_beliefs_2019_l %>% filter(error_dumm == 0 & pref %in% c(1,4)),
+ggplot(dfs_beliefs_2020_l %>% filter(error_dumm == 0 & pref %in% c(1,4)),
        aes(x = ratex, fill = as.factor(pref))) +
   geom_density(alpha = alpha) +
   xlab("Ratex beliefs") +
@@ -897,10 +1224,10 @@ ggplot(dfs_beliefs_2019_l %>% filter(error_dumm == 0 & pref %in% c(1,4)),
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/densities_ratex_2019.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/densities_ratex_2020.pdf", width=7, height=5)
 
 # Create heatmap
-table_ratex = dfs_beliefs_2019_l %>% filter(error_dumm == 0) %>%
+table_ratex = dfs_beliefs_2020_l %>% filter(error_dumm == 0) %>%
   group_by(pref, n_apps) %>%
   summarise(mean_belief = mean(ratex))
 #Create a matrix to represent this info
@@ -916,17 +1243,17 @@ for(i in 1:10){
 colnames(ratex_mean_mat) <- paste( rep("L",10) , c(1:10) , sep="")
 rownames(ratex_mean_mat) <- paste( rep("P",10) , c(1:10) , sep="")
 #TODO: Fix the saving
-pdf(file="mistakes_and_warnings/code/R/analysis mistakes/plots/heatmap_ratex_2019.pdf", width=7, height=5)
+pdf(file="mistakes_and_warnings/code/R/analysis mistakes/plots/heatmap_ratex_2020.pdf", width=7, height=5)
 p = levelplot(t(ratex_mean_mat), xlab = "Application length", ylab = "Preference",
               at = 40:90)
 p
 dev.off()
 
 # Computing bias and distribution of bias
-dfs_beliefs_2019_l %<>% mutate(bias_ratex = prob - ratex)
+dfs_beliefs_2020_l %<>% mutate(bias_ratex = prob - ratex)
 
 # Densities for bias in beliefs
-ggplot(dfs_beliefs_2019_l %>% filter(error_dumm == 0),
+ggplot(dfs_beliefs_2020_l %>% filter(error_dumm == 0),
        aes(x = bias_ratex)) +
   geom_density(alpha = alpha, fill = fill) +
   xlab("Bias in beliefs") +
@@ -937,11 +1264,11 @@ ggplot(dfs_beliefs_2019_l %>% filter(error_dumm == 0),
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/density_bias_ratex_2019.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/density_bias_ratex_2020.pdf", width=7, height=5)
 
 
 # Densities for bias in beliefs
-ggplot(dfs_beliefs_2019_l %>% filter(error_dumm == 0 & (ratex >= 1.00 & ratex <= 99.0)),
+ggplot(dfs_beliefs_2020_l %>% filter(error_dumm == 0 & (ratex >= 1.00 & ratex <= 99.0)),
        aes(x = bias_ratex)) +
   geom_density(alpha = alpha, fill = fill) +
   xlab("Bias in beliefs") +
@@ -952,10 +1279,10 @@ ggplot(dfs_beliefs_2019_l %>% filter(error_dumm == 0 & (ratex >= 1.00 & ratex <=
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/density_bias_ratex_interior_2019.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/density_bias_ratex_interior_2020.pdf", width=7, height=5)
 
 # Create heatmap
-table_bias_ratex = dfs_beliefs_2019_l %>% filter(error_dumm == 0) %>%
+table_bias_ratex = dfs_beliefs_2020_l %>% filter(error_dumm == 0) %>%
   group_by(pref, n_apps) %>%
   summarise(mean_bias_ratex = mean(bias_ratex))
 #Create a matrix to represent this info
@@ -970,13 +1297,13 @@ for(i in 1:10){
 # Show subjective mean beliefs of assignment probability by preference of assignment and application length
 colnames(bias_ratex_mean_mat) <- paste( rep("L",10) , c(1:10) , sep="")
 rownames(bias_ratex_mean_mat) <- paste( rep("P",10) , c(1:10) , sep="")
-pdf(file="mistakes_and_warnings/code/R/analysis mistakes/plots/heatmap_bias_ratex_2019.pdf", width=7, height=5)
+pdf(file="mistakes_and_warnings/code/R/analysis mistakes/plots/heatmap_bias_ratex_2020.pdf", width=7, height=5)
 p = levelplot(t(bias_ratex_mean_mat), xlab = "Application length", ylab = "Preference")
 p
 dev.off()
 
 # Create heatmap
-table_bias_ratex = dfs_beliefs_2019_l %>% filter(error_dumm == 0) %>%
+table_bias_ratex = dfs_beliefs_2020_l %>% filter(error_dumm == 0) %>%
   group_by(pref, n_apps) %>%
   summarise(sd_bias_ratex = sd(bias_ratex))
 #Create a matrix to represent this info
@@ -991,7 +1318,7 @@ for(i in 1:10){
 # Show subjective mean beliefs of assignment probability by preference of assignment and application length
 colnames(bias_ratex_sd_mat) <- paste( rep("L",10) , c(1:10) , sep="")
 rownames(bias_ratex_sd_mat) <- paste( rep("P",10) , c(1:10) , sep="")
-pdf(file="mistakes_and_warnings/code/R/analysis mistakes/plots/heatmap_bias_sd_ratex_2019.pdf", width=7, height=5)
+pdf(file="mistakes_and_warnings/code/R/analysis mistakes/plots/heatmap_bias_sd_ratex_2020.pdf", width=7, height=5)
 p = levelplot(t(bias_ratex_sd_mat), xlab = "Application length", ylab = "Preference")
 p
 dev.off()
@@ -1008,7 +1335,7 @@ Risk_assignment = function(Probs){
   return(risk)
 }
 
-table_risk = dfs_beliefs_2019_l %>% filter(error_dumm == 0) %>%
+table_risk = dfs_beliefs_2020_l %>% filter(error_dumm == 0) %>%
   group_by(ID) %>%
   summarise(risk_ratex = Risk_assignment(ratex/100),
             risk_prob = Risk_assignment(prob/100))
@@ -1017,9 +1344,9 @@ hist(table_risk$risk_ratex[table_risk$risk_ratex > 0.01])
 hist(table_risk$risk_prob[table_risk$risk_ratex > 0.01])
 
 # Count number of students who underpredict their risk and do face a positive risk of being unassigned
-table_risk %>% summarise(under_predicts_risk_mean = 100*mean((risk_ratex > 0.7) & (risk_ratex > risk_prob)),
-                         under_predicts_risk_stderr = 100*sd((risk_ratex > 0.7) & (risk_ratex > risk_prob))/sqrt(n()),
-                         faces_positive_ratex_risk = 100*mean((risk_ratex > 0.7)))
+table_risk %>% summarise(under_predicts_risk_mean = 100*mean((risk_ratex > 0.01) & (risk_ratex > risk_prob)),
+                         under_predicts_risk_stderr = 100*sd((risk_ratex > 0.01) & (risk_ratex > risk_prob))/sqrt(n()),
+                         faces_positive_ratex_risk = 100*mean((risk_ratex > 0.01)))
 table_risk %>% summarise(under_predicts_risk_mean = 100*mean((risk_ratex > 0.7) & (0.1 > risk_prob)),
                          under_predicts_risk_stderr = 100*sd((risk_ratex > 0.7) & (0.1 > risk_prob))/sqrt(n()),
                          faces_positive_ratex_risk = 100*mean((risk_ratex > 0.7)))
@@ -1044,7 +1371,7 @@ ggplot(table_risk_l) +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/histo_risk_2019.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/histo_risk_2020.pdf", width=7, height=5)
 
 # Scatter plot of Subjective vs Ratex risk
 table_risk %<>% mutate(subj_risk_cat = cut(risk_prob, breaks = seq(from = 0.0, to = 1.0, by = 0.1), include.lowest = TRUE))
@@ -1063,23 +1390,22 @@ ggplot(table_risk %>% filter((risk_ratex >= 0.01))) +
         axis.text.x = element_text(angle = 45, hjust=1),
         legend.position = "none")
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/scatter_risk_2019.pdf", width=5, height=5)
-
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/scatter_risk_2020.pdf", width=5, height=5)
 
 
 # Beliefs over Expected cutoffs -------------------------------------------
 
 #Knowledge of cutoffs
-dfs_2019 %<>% mutate(know_cutoff = ifelse(know_cutoff == "Conozco el puntaje de corte del año pasado para cada una de las carreras a las que postulé.",
+dfs_2020 %<>% mutate(know_cutoff = ifelse(know_cutoff == "Conozco el puntaje de corte del año pasado para cada una de las carreras a las que postulé.",
                                           "Knows the cutoffs for \n every program in the list",
                                           ifelse(know_cutoff == "Conozco el puntaje de corte del año pasado sólo para algunas de las carreras a las que postulé.",
                                                  "Knows the cutoffs for \n some but not all programs \n in the list",
                                                  ifelse(know_cutoff == "No conozco el puntaje de corte del año pasado para ninguna de las carreras a las que postulé.",
                                                         "Does not know the cutoffs for \n the program in the list", NA))))
-table(dfs_2019$know_cutoff, useNA = "always")
+table(dfs_2020$know_cutoff, useNA = "always")
 
 # Knowledge of cutoff scores
-ggplot(dfs_2019, aes(x = know_cutoff, fill = fill)) +
+ggplot(dfs_2020, aes(x = know_cutoff, fill = fill)) +
   geom_bar(position="dodge", alpha = alpha, aes(y = 100*(..count..)/sum(..count..))) +
   geom_text(aes( label = round(100*(..count..)/sum(..count..),2),
                  y= 100*(..count..)/sum(..count..) ), stat= "count", vjust = +1.5) +
@@ -1092,10 +1418,10 @@ ggplot(dfs_2019, aes(x = know_cutoff, fill = fill)) +
         panel.grid.minor = element_blank(),
         legend.position = "none",
         panel.background = element_blank())
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knowledge_cutoffs_2019.pdf", width=10, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/knowledge_cutoffs_2020.pdf", width=10, height=5)
 
 # Computing the difference between realized and expected cutoffs
-dfs_cutoffs_2019_w = dfs_2019 %>% select(
+dfs_cutoffs_2020_w = dfs_2020 %>% select(
   starts_with("prob_"),
   starts_with("scores_"),
   starts_with("error_dumm"),
@@ -1104,7 +1430,7 @@ dfs_cutoffs_2019_w = dfs_2019 %>% select(
   starts_with("cutoff_"),
   n_apps, ID, some_mistake,know_cutoff)
 
-dfs_cutoffs_2019_l = reshape(dfs_cutoffs_2019_w,
+dfs_cutoffs_2020_l = reshape(dfs_cutoffs_2020_w,
                              direction='long',
                              varying=list(
                                c('prob_1','prob_2','prob_3','prob_4','prob_5','prob_6','prob_7','prob_8','prob_9','prob_10'),
@@ -1125,21 +1451,22 @@ dfs_cutoffs_2019_l = reshape(dfs_cutoffs_2019_w,
                                'cutoff'),
                              idvar=c('ID','n_apps','some_mistake', 'know_cutoff'))
 
-dfs_cutoffs_2019_l %<>% dplyr::rename(pref = time)
-dfs_cutoffs_2019_l %<>% filter(codigo_car != 0)
+dfs_cutoffs_2020_l %<>% dplyr::rename(pref = time)
+dfs_cutoffs_2020_l %<>% filter(codigo_car != 0)
 
 # Distance in expected cutoff
-dfs_cutoffs_2019_l %<>% mutate(distance_subj_real_cutoffs = ifelse(cutoff_pref > 0,
-                                                                   (cutoff - cutoff_pref)/sd(scores_carr), NA))
-sum(is.na(dfs_cutoffs_2019_l$distance_subj_real_cutoffs))
+#NOTE: we have many scores_carr as NA because students who make a mistake have NAs in their scores in this wave it seems
+dfs_cutoffs_2020_l %<>% mutate(distance_subj_real_cutoffs = ifelse(cutoff_pref > 0,
+                                                                   (cutoff - cutoff_pref)/sd(scores_carr, na.rm = TRUE), NA))
+sum(is.na(dfs_cutoffs_2020_l$distance_subj_real_cutoffs))
 #Check Historgrams
-hist(dfs_cutoffs_2019_l$cutoff)
-hist(dfs_cutoffs_2019_l$cutoff_pref)
-hist((dfs_cutoffs_2019_l %>% subset(pref == 1))$distance_subj_real_cutoffs)
-hist((dfs_cutoffs_2019_l %>% subset(pref == 2))$distance_subj_real_cutoffs)
+hist(dfs_cutoffs_2020_l$cutoff)
+hist(dfs_cutoffs_2020_l$cutoff_pref)
+hist((dfs_cutoffs_2020_l %>% subset(pref == 1))$distance_subj_real_cutoffs)
+hist((dfs_cutoffs_2020_l %>% subset(pref == 2))$distance_subj_real_cutoffs)
 
 # Distribution of bias in expected cutoff scores by knowledge of cutoff
-ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 200) &
+ggplot(data = dfs_cutoffs_2020_l %>% filter((distance_subj_real_cutoffs <= 200) &
                                               (distance_subj_real_cutoffs >= -200)),
        aes(x = distance_subj_real_cutoffs, fill = know_cutoff)) +
   geom_density(alpha = alpha) +
@@ -1151,10 +1478,10 @@ ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 200) 
   theme_bw() +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/bias_exp_cutoff_by_knowledge_2019.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/bias_exp_cutoff_by_knowledge_2020.pdf", width=7, height=5)
 
 # Distribution of bias in expected cutoff scores by preference
-ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 200) &
+ggplot(data = dfs_cutoffs_2020_l %>% filter((distance_subj_real_cutoffs <= 200) &
                                               (distance_subj_real_cutoffs >= -200) & (pref %in% c(1,4,8))),
        aes(x = distance_subj_real_cutoffs, fill = as.factor(pref))) +
   geom_density(alpha = alpha) +
@@ -1168,7 +1495,7 @@ ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 200) 
         panel.background = element_blank())
 
 # Distribution of bias in expected cutoffs by preference
-ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 0.5) &
+ggplot(data = dfs_cutoffs_2020_l %>% filter((distance_subj_real_cutoffs <= 0.5) &
                                               (distance_subj_real_cutoffs >= -0.5)),
        aes(x = as.factor(pref), y = distance_subj_real_cutoffs, fill = as.factor(pref))) +
   geom_violinhalf(alpha = alpha, trim=FALSE, orientation = "x") +
@@ -1182,11 +1509,11 @@ ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 0.5) 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/violin_bias_exp_cutoff_by_pref_2019.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/violin_bias_exp_cutoff_by_pref_2020.pdf", width=7, height=5)
 
 
 # Distribution of bias in expected cutoffs for top-reported pref by application length
-ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 0.5) &
+ggplot(data = dfs_cutoffs_2020_l %>% filter((distance_subj_real_cutoffs <= 0.5) &
                                               (distance_subj_real_cutoffs >= -0.5)) %>%
          subset(pref == 1),
        aes(x = as.factor(n_apps), y = distance_subj_real_cutoffs, fill = as.factor(n_apps))) +
@@ -1201,10 +1528,10 @@ ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 0.5) 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/violin_bias_exp_cutoff_by_app_length_pref_1_2019.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/violin_bias_exp_cutoff_by_app_length_pref_1_2020.pdf", width=7, height=5)
 
 # Distribution of bias in expected cutoffs for reported pref by application length
-ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 0.5) &
+ggplot(data = dfs_cutoffs_2020_l %>% filter((distance_subj_real_cutoffs <= 0.5) &
                                               (distance_subj_real_cutoffs >= -0.5)) %>%
          subset(pref == 3),
        aes(x = as.factor(n_apps), y = distance_subj_real_cutoffs, fill = as.factor(n_apps))) +
@@ -1219,10 +1546,10 @@ ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 0.5) 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/violin_bias_exp_cutoff_by_app_length_pref_3_2019.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/violin_bias_exp_cutoff_by_app_length_pref_3_2020.pdf", width=7, height=5)
 
 # Distribution of bias in expected cutoffs for reported pref by application length
-ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 0.5) &
+ggplot(data = dfs_cutoffs_2020_l %>% filter((distance_subj_real_cutoffs <= 0.5) &
                                               (distance_subj_real_cutoffs >= -0.5)) %>%
          subset(pref == 5),
        aes(x = as.factor(n_apps), y = distance_subj_real_cutoffs, fill = as.factor(n_apps))) +
@@ -1237,11 +1564,11 @@ ggplot(data = dfs_cutoffs_2019_l %>% filter((distance_subj_real_cutoffs <= 0.5) 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/violin_bias_exp_cutoff_by_app_length_pref_5_2019.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/violin_bias_exp_cutoff_by_app_length_pref_5_2020.pdf", width=7, height=5)
 
 
 # Create heatmap
-table_bias_cutoffs = dfs_cutoffs_2019_l %>%
+table_bias_cutoffs = dfs_cutoffs_2020_l %>%
   group_by(pref, n_apps) %>%
   summarise(mean_bias_cutoffs = mean(distance_subj_real_cutoffs, na.rm = TRUE))
 #Create a matrix to represent this info
@@ -1256,13 +1583,12 @@ for(i in 1:10){
 # Show subjective mean beliefs of assignment probability by preference of assignment and application length
 colnames(bias_cutoffs_mean_mat) <- paste( rep("L",10) , c(1:10) , sep="")
 rownames(bias_cutoffs_mean_mat) <- paste( rep("P",10) , c(1:10) , sep="")
-pdf(file="mistakes_and_warnings/code/R/analysis mistakes/plots/heatmap_bias_cutoffs_2019.pdf", width=7, height=5)
+pdf(file="mistakes_and_warnings/code/R/analysis mistakes/plots/heatmap_bias_cutoffs_2020.pdf", width=7, height=5)
 p = levelplot(t(bias_cutoffs_mean_mat), xlab = "Application length", ylab = "Preference")
 p
 dev.off()
 
 #TODO: standardize by the standard deviation of the Ratex distribution of cutoffs
-
 
 # Adaptive beliefs --------------------------------------------------------
 
@@ -1288,17 +1614,17 @@ oferta_panel = merge(oferta_2018, oferta_2019, by = "CODIGO", all = TRUE)
 oferta_panel = merge(oferta_panel, oferta_2020, by = "CODIGO", all = TRUE)
 
 # Paste cutoff panel to survey data and compare beliefs
-dfs_cutoffs_2019_l = merge(dfs_cutoffs_2019_l, cutoffs_panel,
+dfs_cutoffs_2020_l = merge(dfs_cutoffs_2020_l, cutoffs_panel,
                            by.x = "codigo_car",
                            by.y = "codigo_carrera",
                            all.x = TRUE)
 # Merge with oferta_panel
-dfs_cutoffs_2019_l = merge(dfs_cutoffs_2019_l, oferta_panel,
+dfs_cutoffs_2020_l = merge(dfs_cutoffs_2020_l, oferta_panel,
                            by.x = "codigo_car",
                            by.y = "CODIGO",
                            all.x = TRUE)
 
-View(dfs_cutoffs_2019_l %>% select(cutoff, cutoff_pref,
+View(dfs_cutoffs_2020_l %>% select(cutoff, cutoff_pref,
                                    cutoff_2018, cutoff_2019,
                                    cutoff_2020,cutoff_mp,
                                    vacs_tot_2018,cupos_tot_2018,
@@ -1306,152 +1632,170 @@ View(dfs_cutoffs_2019_l %>% select(cutoff, cutoff_pref,
                                    vacs_tot_2020,cupos_tot_2020,
                                    codigo_car, pref))
 
-# Compute bias with respect to cutoffs 2019 (Ratex) and cutoffs 2018 (Adaptive beliefs)
-
-
-#TODO: BECAREFUL HERE, THERE IS A BUG, scores_carr HAS -1 FOR MISTAKERS SO WE SHOULD NOT STANDARDIZED USING THOSE 
-dfs_cutoffs_2019_l %<>% mutate(dist_subj_cutofs_2019 = (cutoff - cutoff_2019)/sd(scores_carr),
-                               dist_subj_cutofs_2018 = (cutoff - cutoff_2018)/sd(scores_carr))
+# Compute bias with respect to cutoffs 2020 (Ratex) and cutoffs 2019 (Adaptive beliefs)
+#NOTE: there are NAs in scores_carr because of students with mistakes
+dfs_cutoffs_2020_l %<>% mutate(dist_subj_cutofs_2020 = (cutoff - cutoff_2020)/sd(scores_carr, na.rm = TRUE),
+                               dist_subj_cutofs_2019 = (cutoff - cutoff_2019)/sd(scores_carr, na.rm = TRUE))
 
 # Distributions of bias in expected cutoffs
-
-# For programs that raised cutoffs
-ggplot(data = reshape2::melt(dfs_cutoffs_2019_l %>% filter(!is.na(dist_subj_cutofs_2019) &
-                                                             !is.na(dist_subj_cutofs_2018)),
+# For all programs
+ggplot(data = reshape2::melt(dfs_cutoffs_2020_l %>% filter(!is.na(dist_subj_cutofs_2020) &
+                                                             !is.na(dist_subj_cutofs_2019)),
                              id.vars = "ID",
-                             measure.vars = c("dist_subj_cutofs_2019", "dist_subj_cutofs_2018")),
+                             measure.vars = c("dist_subj_cutofs_2020", "dist_subj_cutofs_2019")),
        aes(x = value, fill = variable)) +
   geom_density(alpha = alpha) +
   xlab("Distance") +
   ylab("Bias in standardzed expected cutoff score (Subjective - Ratex)") +
   scale_fill_brewer(palette="Pastel1",
                     name="Beliefs",
-                    breaks = c("dist_subj_cutofs_2019",
-                               "dist_subj_cutofs_2018"),
-                    labels = c("Ratex 2019",
-                               "Ratex 2018 \n (Adaptive beliefs)")) +
+                    breaks = c("dist_subj_cutofs_2020",
+                               "dist_subj_cutofs_2019"),
+                    labels = c("Ratex 2020",
+                               "Ratex 2019 \n (Adaptive beliefs)")) +
   geom_vline(xintercept = 0, linetype = "dashed") +
   theme_bw() +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/bias_exp_cutoff_ratex_adaptive.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/bias_exp_cutoff_ratex_adaptive_2020.pdf", width=7, height=5)
 
-# For programs that raised cutoffs
-ggplot(data = reshape2::melt(dfs_cutoffs_2019_l %>% filter(!is.na(dist_subj_cutofs_2019) &
-                                                             !is.na(dist_subj_cutofs_2018) &
-                                                             ((cupos_tot_2019 - cupos_tot_2018)/cupos_tot_2018 >= 0.5)),
+
+oferta_panel %<>% mutate(cupos_change_20_19 = (cupos_tot_2020 - cupos_tot_2019)/cupos_tot_2019)
+mean((oferta_panel$cupos_change_20_19 >= 0.25), na.rm = TRUE)
+mean((oferta_panel$cupos_change_20_19 <= -0.25), na.rm = TRUE)
+
+# For programs that increased vacancies (cutoffs should go down)
+ggplot(data = reshape2::melt(dfs_cutoffs_2020_l %>% filter(!is.na(dist_subj_cutofs_2020) &
+                                                             !is.na(dist_subj_cutofs_2019) &
+                                                             ((cupos_tot_2020 - cupos_tot_2019)/cupos_tot_2019 >= 0.25)),
                              id.vars = "ID",
-                             measure.vars = c("dist_subj_cutofs_2019", "dist_subj_cutofs_2018")),
+                             measure.vars = c("dist_subj_cutofs_2020", "dist_subj_cutofs_2019")),
        aes(x = value, fill = variable)) +
   geom_density(alpha = alpha) +
   xlab("Distance") +
   ylab("Bias in standardzed expected cutoff score (Subjective - Ratex)") +
   scale_fill_brewer(palette="Pastel1",
                     name="Beliefs",
-                    breaks = c("dist_subj_cutofs_2019",
-                               "dist_subj_cutofs_2018"),
-                    labels = c("Ratex 2019",
-                               "Ratex 2018 \n (Adaptive beliefs)")) +
+                    breaks = c("dist_subj_cutofs_2020",
+                               "dist_subj_cutofs_2019"),
+                    labels = c("Ratex 2020",
+                               "Ratex 2019 \n (Adaptive beliefs)")) +
   geom_vline(xintercept = 0, linetype = "dashed") +
   theme_bw() +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/bias_exp_cutoff_ratex_adaptive_positive.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/bias_exp_cutoff_ratex_adaptive_positive_2020.pdf", width=7, height=5)
 
-# For programs that decreased cutoffs
-ggplot(data = reshape2::melt(dfs_cutoffs_2019_l %>% filter(!is.na(dist_subj_cutofs_2019) &
-                                                             !is.na(dist_subj_cutofs_2018) &
-                                                             ((cupos_tot_2019 - cupos_tot_2018)/cupos_tot_2018 <= -0.5)),
+# For programs that decreased vacancies (cutoffs should go up)
+ggplot(data = reshape2::melt(dfs_cutoffs_2020_l %>% filter(!is.na(dist_subj_cutofs_2020) &
+                                                             !is.na(dist_subj_cutofs_2019) &
+                                                             ((cupos_tot_2020 - cupos_tot_2019)/cupos_tot_2019 <= -0.25)),
 
                              id.vars = "ID",
-                             measure.vars = c("dist_subj_cutofs_2019", "dist_subj_cutofs_2018")),
+                             measure.vars = c("dist_subj_cutofs_2020", "dist_subj_cutofs_2019")),
        aes(x = value, fill = variable)) +
   geom_density(alpha = alpha) +
   xlab("Distance") +
   ylab("Bias in standardzed expected cutoff score (Subjective - Ratex)") +
   scale_fill_brewer(palette="Pastel1",
                     name="Beliefs",
-                    breaks = c("dist_subj_cutofs_2019",
-                               "dist_subj_cutofs_2018"),
-                    labels = c("Ratex 2019",
-                               "Ratex 2018 \n (Adaptive beliefs)")) +
+                    breaks = c("dist_subj_cutofs_2020",
+                               "dist_subj_cutofs_2019"),
+                    labels = c("Ratex 2020",
+                               "Ratex 2019 \n (Adaptive beliefs)")) +
   geom_vline(xintercept = 0, linetype = "dashed") +
   theme_bw() +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/bias_exp_cutoff_ratex_adaptive_negative.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/bias_exp_cutoff_ratex_adaptive_negative_2020.pdf", width=7, height=5)
 
 
 # Prevalence and Relevance Strategic mistakes --------------------------------------------
 
 # Prevalence of under-confidence mistakes
 #Merge with Ratex beliefs
-dfs_2019_mp = merge(dfs_2019, ratex_mp_2019, by.x = "ID", by.y = "id", all.x = TRUE)
-dfs_2019_mp %<>% mutate(mp_ratex_19 = as.numeric(as.character(mp_ratex_2019)))
-hist(dfs_2019_mp$mp_ratex_19)
-sum(is.na(dfs_2019_mp$mp_ratex_19))
+dfs_2020_mp = merge(dfs_2020, ratex_mp_2020, by.x = "ID", by.y = "id", all.x = TRUE)
+dfs_2020_mp %<>% mutate(mp_ratex_20 = as.numeric(as.character(mp_ratex_2020)))
+hist(dfs_2020_mp$mp_ratex_20)
+sum(is.na(dfs_2020_mp$mp_ratex_20))
 # Drop obs with NAs
-dfs_2019_mp %<>% filter(!is.na(mp_ratex_19) & !is.na(mp_carr))
+dfs_2020_mp %<>% filter(!is.na(mp_ratex_20) & !is.na(mp_carr))
 
 #Bias in beliefs about top-true pref
-dfs_2019_mp %<>% mutate(bias_cutoff_mp = mp_cutoff_belief - cutoff_mp)
-dfs_2019_mp %<>% mutate(beliefs_cutoff_scorecarr_mp = mp_cutoff_belief - pp_mp)
-hist(dfs_2019_mp$bias_cutoff_mp)
-hist(dfs_2019_mp$beliefs_cutoff_scorecarr_mp)
+dfs_2020_mp %<>% mutate(bias_cutoff_mp = mp_cutoff_belief - cutoff_mp)
+dfs_2020_mp %<>% mutate(beliefs_cutoff_scorecarr_mp = mp_cutoff_belief - pp_mp)
+hist(dfs_2020_mp$bias_cutoff_mp)
+hist(dfs_2020_mp$beliefs_cutoff_scorecarr_mp)
 
 # Under confident mistakes (for free and paid programs)
-dfs_2019_mp %<>% mutate(under_confident_expost = ((n_apps < 10) & (misreport_exclude == 1) &
-                                    (distance_mp >= 0) & (mp_ratex_19 > 0)),
-                     under_confident_exante = ((n_apps < 10) & (misreport_exclude == 1) &
-                                    (mp_ratex_19 > 0)))
+dfs_2020_mp %<>% mutate(under_confident_expost = ((n_apps < 10) & (misreport_exclude == 1) &
+                                    (distance_mp >= 0) & (mp_ratex_20 > 0)),
+                        ordering_expost = ((misreport_order == 1) &
+                             (distance_mp >= 0) & (mp_ratex_20 > 0) & (assigned_above_mp == 1)),
+                        under_confident_exante = ((n_apps < 10) & (misreport_exclude == 1) &
+                                    (mp_ratex_20 > 0)),
+                        ordering_exante = ((misreport_order == 1) & (mp_ratex_20 > 0)))
+#TODO: for the ordering exante we also need to impose that the student has positive probability of being assigned above mp
 # NOTE: checking the share of students with positive Ratex
-# NOTE: checking the share of students with positive Ratex
-mean(dfs_2019_mp$mp_ratex_19 > 0)
-mean(dfs_2019_mp$under_confident_expost)
-mean(dfs_2019_mp$under_confident_exante)
+mean(dfs_2020_mp$mp_ratex_20 > 0)
+mean(dfs_2020_mp$under_confident_expost)
+mean(dfs_2020_mp$under_confident_exante)
+mean(dfs_2020_mp$ordering_expost)
+mean(dfs_2020_mp$ordering_exante)
 # TODO: there is a problem here. Some observations for which we have mp_ratex_20 = 0, we actually have that
 # distance_mp >= 0
-View(dfs_2019_mp %>% subset((distance_mp >= 0) & (mp_ratex_19 == 0) & (pp_mp > 0)))
+View(dfs_2020_mp %>% subset((distance_mp >= 0) & (mp_ratex_20 == 0)))
 #NOTE for the statistics we restrict attention to the version of the question that is NOT free
+dfs_2020_mp %>% subset(rand_money == 1 & inconsistent_type == 0) %>% 
+  summarise(under_confident_expost = mean(under_confident_expost),
+            under_confident_exante = mean(under_confident_exante),
+            ordering_expost = mean(ordering_expost),
+            ordering_exante = mean(ordering_exante))
 
 # Table of results with confidence intervals
 # Exante
-table_under_confident_exante = summarySE(data = dfs_2019_mp %>% subset(rand_money == 1),
+table_under_confident_exante = summarySE(data = dfs_2020_mp %>% subset(rand_money == 1),
           measurevar = "under_confident_exante",
           groupvars = c("know_cutoff"),
           na.rm=TRUE, conf.interval=.95, .drop=TRUE)
 # Expost
-table_under_confident_expost = summarySE(data = dfs_2019_mp %>% subset(rand_money == 1),
+table_under_confident_expost = summarySE(data = dfs_2020_mp %>% subset(rand_money == 1),
           measurevar = "under_confident_expost",
           groupvars = c("know_cutoff"),
           na.rm=TRUE, conf.interval=.95, .drop=TRUE)
 
 # Table to count share of students with an (ex-post or ex-ante) underconfidence mistake
-table_mean_underconf = dfs_2019_mp %>% subset(rand_money == 1) %>%
+table_mean_underconf = dfs_2020_mp %>% subset(rand_money == 1 & inconsistent_type == 0) %>%
   group_by(know_cutoff) %>%
   summarise(mean_under_confidence_expost_perc = 100*mean(under_confident_expost),
-            mean_under_confidence_exante_perc = 100*mean(under_confident_exante))
-table_stderr_underconf = dfs_2019_mp %>% subset(rand_money == 1) %>%
+            mean_under_confidence_exante_perc = 100*mean(under_confident_exante),
+            mean_ordering_expost_perc = 100*mean(ordering_expost),
+            mean_ordering_exante_perc = 100*mean(ordering_exante))
+table_stderr_underconf = dfs_2020_mp %>% subset(rand_money == 1 & inconsistent_type == 0) %>%
   group_by(know_cutoff) %>%
   summarise(stderr_under_confidence_expost_perc = 100*sd(under_confident_expost)/sqrt(n()),
-            stderr_under_confidence_exante_perc = 100*sd(under_confident_exante)/sqrt(n()))
+            stderr_under_confidence_exante_perc = 100*sd(under_confident_exante)/sqrt(n()),
+            stderr_ordering_perc = 100*sd(ordering_expost)/sqrt(n()),
+            stderr_ordering_exante_perc = 100*sd(ordering_exante)/sqrt(n()))
 
 #Write latex table by hand
-table_latex_file = file("mistakes_and_warnings/documents/draft/tables/under_confidence.tex")
+table_latex_file = file("mistakes_and_warnings/documents/draft/tables/under_confidence_and_ordering_2020.tex")
 table_header = c("\\begin{table}[htbp!]",
                  "\\centering",
-                 "\\caption{Under-confidence mistakes}",
+                 "\\caption{Under-confidence and Ordering mistakes}",
                  "\\label{tab:under_confidence}",
                  "\\scalebox{0.7}{",
-                 "\\begin{tabular}{lcc}",
+                 "\\begin{tabular}{lcccc}",
                  "\\toprule",
                  "\\toprule")
 table_columns = paste("Knowledge of cutoffs",
                       "\\makecell[c]{Under-confident mistake \\\\ (ex-post) [\\%]}",
-                      "\\makecell[c]{Under-confident mistake \\\\ (ex-ante) [\\%]}", sep = " & ")
+                      "\\makecell[c]{Under-confident mistake \\\\ (ex-ante) [\\%]}",
+                      "\\makecell[c]{Ordering mistake \\\\ (ex-post) [\\%]}",
+                      "\\makecell[c]{Ordering mistake \\\\ (ex-ante) [\\%]}", sep = " & ")
 table_body = paste(table_columns, "\\\\" ," \\midrule")
 space = '\\\\[0pt]'
 table_stats = table_mean_underconf
@@ -1483,7 +1827,7 @@ for(i in 1:nrow(table_stats)){
 }
 
 table_footer = c("\\bottomrule",
-                 "\\multicolumn{3}{l}{\\textit{Note:} standard errors are computed in parenthesis.}",
+                 "\\multicolumn{5}{l}{\\textit{Note:} standard errors are computed in parenthesis.}",
                  "\\end{tabular}",
                  "}",
                  "\\end{table}")
@@ -1493,16 +1837,16 @@ close(table_latex_file)
 
 
 # How much of this is explained by subjective beliefs?
-hist(dfs_2019_mp %>% subset(rand_money == 1) %>%
+hist(dfs_2020_mp %>% subset(rand_money == 1 & inconsistent_type == 0) %>%
        subset(cutoff_mp > 0) %>%
        subset(under_confident_exante == 1) %>% select(bias_cutoff_mp))
-hist(dfs_2019_mp %>% subset(rand_money == 1) %>%
+hist(dfs_2020_mp %>% subset(rand_money == 1 & inconsistent_type == 0) %>%
        subset(cutoff_mp > 0) %>%
        subset(under_confident_exante == 1) %>% select(beliefs_cutoff_scorecarr_mp))
 
 
 # Distributions of bias for Expected cutoff of top-true preference for students by knowledge of cutoffs
-ggplot(data = dfs_2019_mp %>% subset(rand_money == 1) %>%
+ggplot(data = dfs_2020_mp %>% subset(!is.na(application_type) & !is.na(mp_carr) & rand_money == 1 & inconsistent_type == 0) %>%
          subset(cutoff_mp > 0) %>%
          subset(under_confident_exante == 1),
        aes(x = bias_cutoff_mp, fill = know_cutoff)) +
@@ -1511,20 +1855,20 @@ ggplot(data = dfs_2019_mp %>% subset(rand_money == 1) %>%
   ylab("Frequency") +
   scale_fill_brewer(palette="Pastel1",
                     name="Knowledge of cutoffs")+
-                    #breaks = c("dist_subj_cutofs_2019",
-                    #           "dist_subj_cutofs_2018"),
-                   #labels = c("Ratex 2019",
-                   #             "Ratex 2018 \n (Adaptive beliefs)")) +
+                    #breaks = c("dist_subj_cutofs_2020",
+                    #           "dist_subj_cutofs_2019"),
+                   #labels = c("Ratex 2020",
+                   #             "Ratex 2019 \n (Adaptive beliefs)")) +
   geom_vline(xintercept = 0, linetype = "dashed") +
   theme_bw() +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         #legend.title = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/bias_exp_cutoff_ratex_top_true_underconfident.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/bias_exp_cutoff_ratex_top_true_underconfident_2020.pdf", width=7, height=5)
 
 # Distributions of bias for Expected cutoff of top-true preference for students by knowledge of cutoffs
-ggplot(data = dfs_2019_mp %>% subset(rand_money == 1) %>%
+ggplot(data = dfs_2020_mp %>% subset(!is.na(application_type) & !is.na(mp_carr) & rand_money == 1 & inconsistent_type == 0) %>%
          subset(cutoff_mp > 0) %>%
          subset(under_confident_exante == 1),
        aes(x = beliefs_cutoff_scorecarr_mp, fill = know_cutoff)) +
@@ -1533,43 +1877,41 @@ ggplot(data = dfs_2019_mp %>% subset(rand_money == 1) %>%
   ylab("Frequency") +
   scale_fill_brewer(palette="Pastel1",
                     name="Knowledge of cutoffs")+
-  #breaks = c("dist_subj_cutofs_2019",
-  #           "dist_subj_cutofs_2018"),
-  #labels = c("Ratex 2019",
-  #             "Ratex 2018 \n (Adaptive beliefs)")) +
+  #breaks = c("dist_subj_cutofs_2020",
+  #           "dist_subj_cutofs_2019"),
+  #labels = c("Ratex 2020",
+  #             "Ratex 2019 \n (Adaptive beliefs)")) +
   geom_vline(xintercept = 0, linetype = "dashed") +
   theme_bw() +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         panel.background = element_blank())
 #ylim(0,100)
-ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/distance_exp_cutoff_pp_top_true_underconfident.pdf", width=7, height=5)
+ggsave(file="mistakes_and_warnings/code/R/analysis mistakes/plots/distance_exp_cutoff_pp_top_true_underconfident_2020.pdf", width=7, height=5)
 
 
 # Table to count the share of these mistakes that can be explained by pesimistic behaviour
-dfs_2019_mp %>% subset(rand_money == 1) %>% subset(cutoff_mp > 0) %>%
+dfs_2020_mp %>% subset(!is.na(application_type) & !is.na(mp_carr) & rand_money == 1 & inconsistent_type == 0) %>% subset(cutoff_mp > 0) %>%
   subset(under_confident_expost == 1) %>%
-  group_by(know_cutoff) %>%
-  summarise(under_confidence_expost_perc_pesimistic = 100*mean((bias_cutoff_mp > 0)),
+#  group_by(know_cutoff) %>%
+  summarise(n = n(),
+            under_confidence_expost_perc_pesimistic = 100*mean((bias_cutoff_mp > 0)),
             under_confidence_expost_perc_weird = 100*mean((beliefs_cutoff_scorecarr_mp > 0)))
 
-
-dfs_2019_mp %>% subset(rand_money == 1) %>% subset(cutoff_mp > 0) %>%
+dfs_2020_mp %>% subset(!is.na(application_type) & !is.na(mp_carr) & rand_money == 1 & inconsistent_type == 0) %>% subset(cutoff_mp > 0) %>%
   subset(under_confident_exante == 1) %>%
-  group_by(know_cutoff) %>%
-  summarise(under_confidence_exante_perc_pesimistic = 100*mean((bias_cutoff_mp > 0)),
+#  group_by(know_cutoff) %>%
+  summarise(n = n(),
+            under_confidence_exante_perc_pesimistic = 100*mean((bias_cutoff_mp > 0)),
             under_confidence_exante_perc_weird = 100*mean((beliefs_cutoff_scorecarr_mp > 0)))
-
-
-
 
 # Check if students who still skip programs even though the donot believe is out of their reach is due to
 # measurement error or wrong beliefs about admission requirements
-dfs_aux_asked_ppm =  dfs_reqs_2019_l %>% subset(!is.na(req_ppm_value_correct)) %>%
+dfs_aux_asked_ppm =  dfs_reqs_2020_l %>% subset(!is.na(req_ppm_value_correct)) %>%
   group_by(ID) %>% summarise(mean_knows_req_ppm = mean(req_ppm_value_correct))
 
-dfs_2019_mp = merge(dfs_2019_mp, dfs_aux_asked_ppm, by = "ID", all.x = TRUE)
+dfs_2020_mp = merge(dfs_2020_mp, dfs_aux_asked_ppm, by = "ID", all.x = TRUE)
 
-dfs_2019_mp %>% subset(rand_money == 1) %>% subset(cutoff_mp > 0) %>%
+dfs_2020_mp %>% subset(rand_money == 1) %>% subset(cutoff_mp > 0) %>%
   subset(under_confident_expost == 1) %>%
   subset(!is.na(mean_knows_req_ppm)) %>%
   group_by(as.factor(mean_knows_req_ppm)) %>%
@@ -1578,93 +1920,189 @@ dfs_2019_mp %>% subset(rand_money == 1) %>% subset(cutoff_mp > 0) %>%
 
 #NOTE: we do not get enough observations to make inference and results do not go in the intuitive direction
 
+#Checking ex-ante mistakes and reasons for skipping the top-true preference
+data_aux = dfs_2020_mp %>% subset(!is.na(application_type) & !is.na(mp_carr) & rand_money == 1 & inconsistent_type == 0) %>%
+  subset(cutoff_mp > 0) %>%
+  subset(under_confident_exante == 1)
+
+#NOTE: we need the survey of 2020 to dig deeper in why students missreport
+table_appp_types_total = data_aux %>% 
+  group_by(application_type) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>%
+  select(application_type, n)
+table_appp_types_r2 = data_aux %>% 
+  group_by(application_type, reason_strategic_2) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_2 != "") %>%
+  dplyr::rename(reason = reason_strategic_2) %>% 
+  select(!n)
+table_appp_types_r5 = data_aux %>% 
+  group_by(application_type, reason_strategic_5) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_5 != "") %>%
+  dplyr::rename(reason = reason_strategic_5) %>% 
+  select(!n)
+table_appp_types_r6 = data_aux %>% 
+  group_by(application_type, reason_strategic_6) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_6 != "") %>%
+  dplyr::rename(reason = reason_strategic_6) %>% 
+  select(!n)
+table_appp_types_r7 = data_aux %>% 
+  group_by(application_type, reason_strategic_7) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_7 != "") %>%
+  dplyr::rename(reason = reason_strategic_7) %>% 
+  select(!n)
+table_appp_types_r8 = data_aux %>% 
+  group_by(application_type, reason_strategic_8) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>% 
+  filter(reason_strategic_8 != "") %>%
+  dplyr::rename(reason = reason_strategic_8) %>% 
+  select(!n)
+table_appp_types_rother = data_aux %>% 
+  mutate(reason_strategic_other_bool = ifelse(reason_strategic_other != "", "Other", "")) %>% 
+  group_by(application_type, reason_strategic_other_bool) %>%
+  tally() %>%
+  mutate(freq = 100*n / sum(n)) %>%
+  filter(reason_strategic_other_bool != "") %>%
+  dplyr::rename(reason = reason_strategic_other_bool) %>% 
+  select(!n)
+# Join tables
+table_appp_types_reasons = rbind(table_appp_types_r2, table_appp_types_r5, table_appp_types_r6, table_appp_types_r7,
+                                 table_appp_types_r8, table_appp_types_rother)
+table_appp_types_reasons_exclusion = table_appp_types_reasons %>% subset(application_type == "Misreporting Exclusion")
+
+# Write the latex table 
+
+#Write latex table by hand
+table_latex_file = file("mistakes_and_warnings/documents/draft/tables/reasons_misreporting_underconfidence_consistent_2020.tex")
+table_header = c("\\begin{table}[htbp!]",
+                 "\\centering",
+                 "\\caption{Reasons for misreporting conditional on making an ex-ante under-confidence (consistent responses)}",
+                 "\\label{tab:reasons_misreporting_underconfidence_consistent_2020}",
+                 "\\scalebox{0.7}{",
+                 "\\begin{tabular}{p{0.9\\textwidth}c}",
+                 "\\toprule",
+                 "\\toprule")
+table_columns = paste("Application type",
+                      "\\makecell[c]{Misreporting \\\\ Exclusion [\\%]}",
+                      sep = " & ")
+table_body = paste(table_columns, "\\\\" ," \\midrule")
+space = '\\\\[0pt]'
+table_body = paste(table_body, "Reasons", space)
+#Fill table body
+for(i in 1:nrow(table_appp_types_reasons_exclusion)){
+  row = paste(table_appp_types_reasons_exclusion[i,2], "&", round(table_appp_types_reasons_exclusion[i,3],2), sep="")
+  row = paste(row, space)
+  table_body = c(table_body, row)
+}
+# Add total
+row_total = paste("Total", "&", table_appp_types_total[1,2], sep="")
+row_total = paste(row_total, space)
+table_body = c(table_body, "\\midrule", row_total)
+
+table_footer = c("\\bottomrule",
+                 "\\multicolumn{2}{l}{\\textit{Note:} respondents can choose multiple reasons. Percentages are computed among the fraction of consistent respondents.}",
+                 "\\end{tabular}",
+                 "}",
+                 "\\end{table}")
+table_latex_code = c(table_header, table_body, table_footer)
+writeLines(table_latex_code, table_latex_file)
+close(table_latex_file)
+
+
 
 # Projecting bias ---------------------------------------------------------
 
-View(dfs_cutoffs_2019_l)
-hist(dfs_cutoffs_2019_l$distance_subj_real_cutoffs)
+View(dfs_cutoffs_2020_l)
+hist(dfs_cutoffs_2020_l$distance_subj_real_cutoffs)
 # Merge with all variables
-dfs_cutoffs_2019_l %<>% mutate(scores_carr_standard = ifelse(scores_carr != -1,
-                                                             (scores_carr - mean(scores_carr))/sd(scores_carr), NA))
-hist(dfs_cutoffs_2019_l$scores_carr_standard)
-dfs_cutoffs_2019_l_merged = merge(dfs_cutoffs_2019_l, dfs_2019, by.x = "ID", by.y = "ID", all.x = TRUE)
-dfs_cutoffs_2019_l_merged %<>% mutate(nem_standard         = ifelse(!is.na(PTJE_NEM),
-                              (PTJE_NEM - mean(PTJE_NEM))/sd(PTJE_NEM), NA),
-                              cutoff_2019_standard = ifelse(!is.na(cutoff_2019) & (cutoff_2019 > 0),
-                                                            (cutoff_2019 - mean(cutoff_2019, na.rm = TRUE))/sd(cutoff_2019, na.rm = TRUE), NA),
-                              dist_scores_carr_cutoff_2019 = ifelse((scores_carr!= -1) & (cutoff_2019 >= 0),
-                                                                    (scores_carr - cutoff_2019)/sd(cutoff_2019, na.rm = TRUE), NA))
-dfs_cutoffs_2019_l_merged %<>% mutate(last_listed = ifelse(n_apps.x == pref, 1, 0),
+dfs_cutoffs_2020_l %<>% mutate(scores_carr_standard = ifelse(scores_carr != -1,
+                                                             (scores_carr - mean(scores_carr, na.rm = TRUE))/sd(scores_carr, na.rm = TRUE), NA))
+hist(dfs_cutoffs_2020_l$scores_carr_standard)
+dfs_cutoffs_2020_l_merged = merge(dfs_cutoffs_2020_l, dfs_2020, by.x = "ID", by.y = "ID", all.x = TRUE)
+dfs_cutoffs_2020_l_merged %<>% mutate(nem_standard         = ifelse(!is.na(PTJE_NEM),
+                              (PTJE_NEM - mean(PTJE_NEM, na.rm = TRUE))/sd(PTJE_NEM, na.rm = TRUE), NA),
+                              cutoff_2020_standard = ifelse(!is.na(cutoff_2020) & (cutoff_2020 > 0),
+                                                            (cutoff_2020 - mean(cutoff_2020, na.rm = TRUE))/sd(cutoff_2020, na.rm = TRUE), NA),
+                              dist_scores_carr_cutoff_2020 = ifelse((scores_carr!= -1) & (cutoff_2020 >= 0),
+                                                                    (scores_carr - cutoff_2020)/sd(cutoff_2020, na.rm = TRUE), NA))
+dfs_cutoffs_2020_l_merged %<>% mutate(last_listed = ifelse(n_apps.x == pref, 1, 0),
                                       is_mp = ifelse(pref_mp == pref, 1, 0))
 # Merge with bias ratex
-dfs_cutoffs_2019_l_merged = merge(dfs_cutoffs_2019_l_merged, dfs_beliefs_2019_l %>%
+dfs_cutoffs_2020_l_merged = merge(dfs_cutoffs_2020_l_merged, dfs_beliefs_2020_l %>%
                                     select(ID, ratex, bias_ratex, nw, pref),
                                   by.x = c("ID", "pref"), by.y = c("ID", "pref"),
                                   all.x = TRUE)
-hist(dfs_cutoffs_2019_l_merged$scores_carr)
-hist(dfs_cutoffs_2019_l_merged$scores_carr_standard)
-hist(dfs_cutoffs_2019_l_merged$nem_standard)
-hist(dfs_cutoffs_2019_l_merged$distance_subj_real_cutoffs)
-hist(dfs_cutoffs_2019_l_merged$cutoff_2019)
-hist(dfs_cutoffs_2019_l_merged$cutoff_2019_standard)
-hist(dfs_cutoffs_2019_l_merged$dist_scores_carr_cutoff_2019)
-hist(dfs_cutoffs_2019_l_merged$bias_ratex)
-table(dfs_cutoffs_2019_l_merged$last_listed, useNA = "always")
-table(dfs_cutoffs_2019_l_merged$is_mp, useNA = "always")
-table(dfs_cutoffs_2019_l_merged$nw, useNA = "always")
-hist(dfs_cutoffs_2019_l_merged$INGRESO_BRUTO_FAM)
+hist(dfs_cutoffs_2020_l_merged$scores_carr)
+hist(dfs_cutoffs_2020_l_merged$scores_carr_standard)
+hist(dfs_cutoffs_2020_l_merged$nem_standard)
+hist(dfs_cutoffs_2020_l_merged$distance_subj_real_cutoffs)
+hist(dfs_cutoffs_2020_l_merged$cutoff_2020)
+hist(dfs_cutoffs_2020_l_merged$cutoff_2020_standard)
+hist(dfs_cutoffs_2020_l_merged$dist_scores_carr_cutoff_2020)
+hist(dfs_cutoffs_2020_l_merged$bias_ratex)
+table(dfs_cutoffs_2020_l_merged$last_listed, useNA = "always")
+table(dfs_cutoffs_2020_l_merged$is_mp, useNA = "always")
+table(dfs_cutoffs_2020_l_merged$nw, useNA = "always")
+hist(dfs_cutoffs_2020_l_merged$INGRESO_BRUTO_FAM)
 
 
 # Create similar dataframe but with only most preferred program
-dfs_mp_2019_merged = merge(dfs_2019 %>% filter(rand_money == 1), cutoffs_panel, by.x = "mp_carr", by.y = "codigo_carrera", all.x = TRUE)
+dfs_mp_2020_merged = merge(dfs_2020 %>% filter(rand_money == 1), cutoffs_panel, by.x = "mp_carr", by.y = "codigo_carrera", all.x = TRUE)
 
 # The variable mp_cutoff_belief is the subjective expectation
 
 # Remove objects from the workspace to free RAM
 #NOTE: does not free all memory, maybe due to heap memory usage
-rm(list=setdiff(ls(), c("dfs_cutoffs_2019_l_merged", "dfs_mp_2019_merged")))
+rm(list=setdiff(ls(), c("dfs_cutoffs_2020_l_merged", "dfs_mp_2020_merged")))
 gc()
-
-
 
 #Models with fixed effects
 # Run regression with student fixed effect, program fixed effect, distance between score and cutoff,
 #and rank of preference
-dfs_cutoffs_2019_l_merged %<>% mutate(distance_subj_2018_cutoffs_prop = ifelse(cutoff_2018 > 0,
-                                                                               100*(cutoff - cutoff_2018)/cutoff_2018, NA),
-                                      dist_scores_carr_cutoff_2018_prop = ifelse((scores_carr!= -1) & (cutoff_2018 > 0),
-                                                                                 100*(scores_carr - cutoff_2018)/cutoff_2018, NA),
-                                      dist_scores_carr_cutoff_norm_2018_prop = abs(dist_scores_carr_cutoff_2018_prop),
-                                      dist_positive = dist_scores_carr_cutoff_norm_2018_prop*(dist_scores_carr_cutoff_2018_prop > 0),
-                                      dist_negative = dist_scores_carr_cutoff_norm_2018_prop*(dist_scores_carr_cutoff_2018_prop <= 0),
+dfs_cutoffs_2020_l_merged %<>% mutate(distance_subj_2019_cutoffs_prop = ifelse(cutoff_2019 > 0,
+                                                                               100*(cutoff - cutoff_2019)/cutoff_2019, NA),
+                                      dist_scores_carr_cutoff_2019_prop = ifelse((scores_carr!= -1) & (cutoff_2019 > 0),
+                                                                                 100*(scores_carr - cutoff_2019)/cutoff_2019, NA),
+                                      dist_scores_carr_cutoff_norm_2019_prop = abs(dist_scores_carr_cutoff_2019_prop),
+                                      dist_positive = dist_scores_carr_cutoff_norm_2019_prop*(dist_scores_carr_cutoff_2019_prop > 0),
+                                      dist_negative = dist_scores_carr_cutoff_norm_2019_prop*(dist_scores_carr_cutoff_2019_prop <= 0),
                                       dist_positive2 = dist_positive^2,
                                       dist_negative2 = dist_negative^2)
 
 
 
 
-hist(dfs_cutoffs_2019_l_merged$dist_scores_carr_cutoff_norm_2018_prop)
-hist(dfs_cutoffs_2019_l_merged$dist_positive)
-hist(dfs_cutoffs_2019_l_merged$dist_positive2)
-hist(dfs_cutoffs_2019_l_merged$dist_negative)
-hist(dfs_cutoffs_2019_l_merged$dist_negative2)
-hist(dfs_cutoffs_2019_l_merged$ratex)
-#hist(dfs_cutoffs_2019_l_merged$distance_subj_2018_cutoffs)
-hist(dfs_cutoffs_2019_l_merged$distance_subj_2018_cutoffs_prop)
+hist(dfs_cutoffs_2020_l_merged$dist_scores_carr_cutoff_norm_2019_prop)
+hist(dfs_cutoffs_2020_l_merged$dist_positive)
+hist(dfs_cutoffs_2020_l_merged$dist_positive2)
+hist(dfs_cutoffs_2020_l_merged$dist_negative)
+hist(dfs_cutoffs_2020_l_merged$dist_negative2)
+hist(dfs_cutoffs_2020_l_merged$ratex)
+#hist(dfs_cutoffs_2020_l_merged$distance_subj_2019_cutoffs)
+hist(dfs_cutoffs_2020_l_merged$distance_subj_2019_cutoffs_prop)
 
 # Two-way fixed-effects regression
-bias_exp_cutoffs_tways = feols(data = dfs_cutoffs_2019_l_merged %>%
-                               subset((scores_carr != -1) & !is.na(cutoff_2018)) %>%
-                               subset(cutoff_2018 > 0) %>%
+bias_exp_cutoffs_tways = feols(data = dfs_cutoffs_2020_l_merged %>%
+                               subset((scores_carr != -1) & !is.na(cutoff_2019)) %>%
+                               subset(cutoff_2019 > 0) %>%
                                #subset(ratex < 100) %>%
                                #subset(ratex > 0) %>%
                                filter(know_cutoff.x == "Knows the cutoffs for \n every program in the list") %>%
                                select(ID,
                                       codigo_car,
                                       last_listed,
-                                      distance_subj_2018_cutoffs_prop,
-                                      #dist_scores_carr_cutoff_2019,
-                                      dist_scores_carr_cutoff_norm_2018_prop,
+                                      distance_subj_2019_cutoffs_prop,
+                                      #dist_scores_carr_cutoff_2020,
+                                      dist_scores_carr_cutoff_norm_2019_prop,
                                       pref,
                                       scores_carr_standard,
                                       is_mp,
@@ -1674,10 +2112,10 @@ bias_exp_cutoffs_tways = feols(data = dfs_cutoffs_2019_l_merged %>%
                                       dist_positive2,
                                       dist_negative,
                                       dist_negative2,
-                                      cutoff_2018,
+                                      cutoff_2019,
                                       cutoff),
                              #fml = distance_subj_real_cutoffs ~
-                             fml = distance_subj_2018_cutoffs_prop ~
+                             fml = distance_subj_2019_cutoffs_prop ~
                              #fml = cutoff ~
                                #cutoff_pref +
                                #scores_carr_standard  +
@@ -1693,11 +2131,11 @@ bias_exp_cutoffs_tways = feols(data = dfs_cutoffs_2019_l_merged %>%
                                #as.factor(last_listed) +
                                #as.factor(is_mp) +
                                #as.factor(nw) +
-                               #poly(cutoff_2019_standard,1) +
-                               #dist_scores_carr_cutoff_2019 +
-                               #dist_scores_carr_cutoff_square_2019*(dist_scores_carr_cutoff_2019 < 0) +
-                               #dist_scores_carr_cutoff_square_2019*(dist_scores_carr_cutoff_2019 >= 0) +
-                               #dist_scores_carr_cutoff_square_2019*(dist_scores_carr_cutoff_2019 < 0 ) +
+                               #poly(cutoff_2020_standard,1) +
+                               #dist_scores_carr_cutoff_2020 +
+                               #dist_scores_carr_cutoff_square_2020*(dist_scores_carr_cutoff_2020 < 0) +
+                               #dist_scores_carr_cutoff_square_2020*(dist_scores_carr_cutoff_2020 >= 0) +
+                               #dist_scores_carr_cutoff_square_2020*(dist_scores_carr_cutoff_2020 < 0 ) +
                                #poly(dist_positive,2, raw = TRUE) +
                                dist_positive +
                                #dist_positive2 +
@@ -1710,41 +2148,81 @@ bias_exp_cutoffs_tways = feols(data = dfs_cutoffs_2019_l_merged %>%
                                as.factor(pref) | ID)
 summary(bias_exp_cutoffs_tways)
 
+#Regression of bias norm for expected cutoff over a set of characteristics
+#TODO: the dependent variable is always positive here, so we need to take a log or so (after addressing the zeros)
+m_bias_norm_cutoffs = lm(data = dfs_cutoffs_2020_l_merged %>%
+                           subset((scores_carr != -1) & !is.na(cutoff_2019)) %>%
+                           subset(cutoff_2019 > 0) %>%
+                           mutate(public = ifelse(GRUPO_DEPENCIA %in% c(3,4), 1, 0),
+                                  voucher = ifelse(GRUPO_DEPENCIA == 2, 1, 0),
+                                  bias_norm = sqrt(distance_subj_2019_cutoffs_prop^2),
+                                  bias_norm = ifelse(bias_norm == 0, 0.001, bias_norm)) %>%
+                           #subset(ratex < 100) %>%
+                           #subset(ratex > 0) %>%
+                           filter(know_cutoff.x == "Knows the cutoffs for \n every program in the list"),
+                         formula = log(bias_norm) ~
+                           dist_positive +
+                           dist_negative +
+                           poly(scores_carr_standard,1, raw = TRUE)  +
+                           #poly(nem_standard,1, raw = TRUE)  +
+                           as.factor(is_female) +
+                           #as.factor(INGRESO_BRUTO_FAM <= 5) +
+                           #as.factor(BEA) +
+                           as.factor(public) +
+                           as.factor(voucher) +
+                           #as.factor(RAMA_EDUCACIONAL) +
+                           #(ratex == 0) +
+                           #(ratex == 1) +
+                           #as.factor(codigo_car) +
+                           #as.factor(last_listed) +
+                           as.factor(is_mp) +
+                           as.factor(nw) +
+                           #poly(cutoff_2020_standard,1, raw = TRUE) +
+                           #poly(dist_scores_carr_cutoff_2020*dist_scores_carr_cutoff_2020,1, raw = TRUE) +
+                           #poly(dist_scores_carr_cutoff_2020*dist_scores_carr_cutoff_2020*(dist_scores_carr_cutoff_2020 < 0 ),1, raw = TRUE) +
+                           #as.factor(know_cutoff) +
+                           #as.factor(pref):as.factor(n_apps.x)
+                           as.factor(pref))
+#as.factor(pref)*as.factor(n_apps.x))
+summary(m_bias_norm_cutoffs)
+library(stargazer)
+stargazer(m_bias_norm_cutoffs, type = "latex")
+
 #Redoing the previous analysis but only for top-true preference
-dfs_mp_2019_merged %<>% mutate(distance_subj_2018_cutoffs_prop = ifelse(cutoff_2018 > 0,
-                                                                        100*(mp_cutoff_belief - cutoff_2018)/cutoff_2018, NA),
-                                      dist_scores_carr_cutoff_2018_prop = ifelse((pp_mp!= 0) & (cutoff_2018 > 0),
-                                                                                 100*(pp_mp - cutoff_2018)/cutoff_2018, NA),
-                                      dist_scores_carr_cutoff_norm_2018_prop = abs(dist_scores_carr_cutoff_2018_prop),
-                                      dist_positive = dist_scores_carr_cutoff_norm_2018_prop*(dist_scores_carr_cutoff_2018_prop > 0),
-                                      dist_negative = dist_scores_carr_cutoff_norm_2018_prop*(dist_scores_carr_cutoff_2018_prop <= 0),
+dfs_mp_2020_merged %<>% mutate(distance_subj_2019_cutoffs_prop = ifelse(cutoff_2019 > 0,
+                                                                        100*(mp_cutoff_belief - cutoff_2019)/cutoff_2019, NA),
+                                      dist_scores_carr_cutoff_2019_prop = ifelse((pp_mp!= 0) & (cutoff_2019 > 0),
+                                                                                 100*(pp_mp - cutoff_2019)/cutoff_2019, NA),
+                                      dist_scores_carr_cutoff_norm_2019_prop = abs(dist_scores_carr_cutoff_2019_prop),
+                                      dist_positive = dist_scores_carr_cutoff_norm_2019_prop*(dist_scores_carr_cutoff_2019_prop > 0),
+                                      dist_negative = dist_scores_carr_cutoff_norm_2019_prop*(dist_scores_carr_cutoff_2019_prop <= 0),
                                       dist_positive2 = dist_positive^2,
                                       dist_negative2 = dist_negative^2)
 # PLots some stats
-hist(dfs_mp_2019_merged$dist_scores_carr_cutoff_norm_2018_prop)
-hist(dfs_mp_2019_merged$dist_positive)
-hist(dfs_mp_2019_merged$dist_positive2)
-hist(dfs_mp_2019_merged$dist_negative)
-hist(dfs_mp_2019_merged$dist_negative2)
-#hist(dfs_mp_2019_merged$ratex)
-hist(dfs_mp_2019_merged$mp_cutoff_belief)
-hist(dfs_mp_2019_merged$pp_mp)
-#hist(dfs_mp_2019_merged$distance_subj_2018_cutoffs)
-hist(dfs_mp_2019_merged$distance_subj_2018_cutoffs_prop)
+hist(dfs_mp_2020_merged$dist_scores_carr_cutoff_norm_2019_prop)
+hist(dfs_mp_2020_merged$dist_positive)
+hist(dfs_mp_2020_merged$dist_positive2)
+hist(dfs_mp_2020_merged$dist_negative)
+hist(dfs_mp_2020_merged$dist_negative2)
+#hist(dfs_mp_2020_merged$ratex)
+hist(dfs_mp_2020_merged$mp_cutoff_belief)
+hist(dfs_mp_2020_merged$pp_mp)
+#hist(dfs_mp_2020_merged$distance_subj_2019_cutoffs)
+hist(dfs_mp_2020_merged$distance_subj_2019_cutoffs_prop)
 
 # Linear regression
-bias_exp_cutoffs_lm = lm(data = dfs_mp_2019_merged %>%
-                                 subset((pp_mp != 0) & !is.na(cutoff_2018)) %>%
-                                 subset(cutoff_2018 > 0) %>%
+bias_exp_cutoffs_lm = lm(data = dfs_mp_2020_merged %>%
+                                 subset((pp_mp != 0) & !is.na(cutoff_2019)) %>%
+                                 subset(cutoff_2019 > 0) %>%
                                  #subset(ratex < 100) %>%
                                  #subset(ratex > 0) %>%
                                  filter(know_cutoff == "Knows the cutoffs for \n every program in the list") %>%
                                  select(ID,
                                         mp_carr,
                                         #last_listed,
-                                        distance_subj_2018_cutoffs_prop,
-                                        #dist_scores_carr_cutoff_2019,
-                                        dist_scores_carr_cutoff_norm_2018_prop,
+                                        distance_subj_2019_cutoffs_prop,
+                                        #dist_scores_carr_cutoff_2020,
+                                        dist_scores_carr_cutoff_norm_2019_prop,
                                         #pref,
                                         #scores_carr_standard,
                                         #is_mp,
@@ -1754,10 +2232,10 @@ bias_exp_cutoffs_lm = lm(data = dfs_mp_2019_merged %>%
                                         dist_positive2,
                                         dist_negative,
                                         dist_negative2,
-                                        cutoff_2018,
+                                        cutoff_2019,
                                         mp_cutoff_belief),
                                #fml = distance_subj_real_cutoffs ~
-                               formula = distance_subj_2018_cutoffs_prop ~
+                               formula = distance_subj_2019_cutoffs_prop ~
                                  #fml = cutoff ~
                                  #cutoff_pref +
                                  #scores_carr_standard  +
@@ -1773,11 +2251,11 @@ bias_exp_cutoffs_lm = lm(data = dfs_mp_2019_merged %>%
                                #as.factor(last_listed) +
                                #as.factor(is_mp) +
                                #as.factor(nw) +
-                               #poly(cutoff_2019_standard,1) +
-                               #dist_scores_carr_cutoff_2019 +
-                               #dist_scores_carr_cutoff_square_2019*(dist_scores_carr_cutoff_2019 < 0) +
-                               #dist_scores_carr_cutoff_square_2019*(dist_scores_carr_cutoff_2019 >= 0) +
-                               #dist_scores_carr_cutoff_square_2019*(dist_scores_carr_cutoff_2019 < 0 ) +
+                               #poly(cutoff_2020_standard,1) +
+                               #dist_scores_carr_cutoff_2020 +
+                               #dist_scores_carr_cutoff_square_2020*(dist_scores_carr_cutoff_2020 < 0) +
+                               #dist_scores_carr_cutoff_square_2020*(dist_scores_carr_cutoff_2020 >= 0) +
+                               #dist_scores_carr_cutoff_square_2020*(dist_scores_carr_cutoff_2020 < 0 ) +
                                #poly(dist_positive,2, raw = TRUE) +
                                dist_positive +
                                  #dist_positive2 +
@@ -1793,13 +2271,13 @@ summary(bias_exp_cutoffs_lm)
 # Projecting bias on observable characteristics of students
 
 #Regression of bias for expected cutoff over a set of characteristics
-m_bias_cutoffs = lm(data = dfs_cutoffs_2019_l_merged %>%
-                      subset((scores_carr != -1) & !is.na(cutoff_2018)) %>%
-                      subset(cutoff_2018 > 0) %>%
+m_bias_cutoffs = lm(data = dfs_cutoffs_2020_l_merged %>%
+                      subset((scores_carr != -1) & !is.na(cutoff_2019)) %>%
+                      subset(cutoff_2019 > 0) %>%
                       #subset(ratex < 100) %>%
                       #subset(ratex > 0) %>%
                       filter(know_cutoff.x == "Knows the cutoffs for \n every program in the list"),
-                    formula = distance_subj_2018_cutoffs_prop ~
+                    formula = distance_subj_2019_cutoffs_prop ~
                       dist_positive +
                       dist_negative +
                       poly(scores_carr_standard,1, raw = TRUE)  +
@@ -1815,9 +2293,9 @@ m_bias_cutoffs = lm(data = dfs_cutoffs_2019_l_merged %>%
                       as.factor(last_listed) +
                       as.factor(is_mp) +
                       as.factor(nw) +
-                      poly(cutoff_2019_standard,1, raw = TRUE) +
-                      #poly(dist_scores_carr_cutoff_2019*dist_scores_carr_cutoff_2019,1, raw = TRUE) +
-                      #poly(dist_scores_carr_cutoff_2019*dist_scores_carr_cutoff_2019*(dist_scores_carr_cutoff_2019 < 0 ),1, raw = TRUE) +
+                      poly(cutoff_2020_standard,1, raw = TRUE) +
+                      #poly(dist_scores_carr_cutoff_2020*dist_scores_carr_cutoff_2020,1, raw = TRUE) +
+                      #poly(dist_scores_carr_cutoff_2020*dist_scores_carr_cutoff_2020*(dist_scores_carr_cutoff_2020 < 0 ),1, raw = TRUE) +
                       #as.factor(know_cutoff) +
                       #as.factor(pref):as.factor(n_apps.x)
                       as.factor(pref) +
@@ -1825,43 +2303,7 @@ m_bias_cutoffs = lm(data = dfs_cutoffs_2019_l_merged %>%
 #as.factor(pref)*as.factor(n_apps.x))
 summary(m_bias_cutoffs)
 
-#Regression of bias norm for expected cutoff over a set of characteristics
-library(stargazer)
 
-#TODO: the dependent variable is always positive here, so we need to take a log or so (after addressing the zeros)
-m_bias_norm_cutoffs = lm(data = dfs_cutoffs_2019_l_merged %>%
-                           subset((scores_carr != -1) & !is.na(cutoff_2018)) %>%
-                           subset(cutoff_2018 > 0) %>%
-                           #subset(ratex < 100) %>%
-                           #subset(ratex > 0) %>%
-                           filter(know_cutoff.x == "Knows the cutoffs for \n every program in the list"),
-                         formula = sqrt(distance_subj_2018_cutoffs_prop^2) ~
-                           dist_positive +
-                           dist_negative +
-                           poly(scores_carr_standard,1, raw = TRUE)  +
-                           poly(nem_standard,1, raw = TRUE)  +
-                           as.factor(is_female) +
-                           #as.factor(INGRESO_BRUTO_FAM <= 5) +
-                           as.factor(BEA) +
-                           as.factor(GRUPO_DEPENCIA) +
-                           #as.factor(RAMA_EDUCACIONAL) +
-                           #(ratex == 0) +
-                           #(ratex == 1) +
-                           #as.factor(codigo_car) +
-                           as.factor(last_listed) +
-                           as.factor(is_mp) +
-                           as.factor(nw) +
-                           poly(cutoff_2019_standard,1, raw = TRUE) +
-                           #poly(dist_scores_carr_cutoff_2019*dist_scores_carr_cutoff_2019,1, raw = TRUE) +
-                           #poly(dist_scores_carr_cutoff_2019*dist_scores_carr_cutoff_2019*(dist_scores_carr_cutoff_2019 < 0 ),1, raw = TRUE) +
-                           #as.factor(know_cutoff) +
-                           #as.factor(pref):as.factor(n_apps.x)
-                           as.factor(pref) +
-                           as.factor(n_apps.x))
-#as.factor(pref)*as.factor(n_apps.x))
-summary(m_bias_norm_cutoffs)
-
-stargazer(m_bias_norm_cutoffs, type = "latex")
 
 # Stargazer the table to latex
 
@@ -1870,7 +2312,7 @@ stargazer(m_bias_norm_cutoffs, type = "latex")
 #          title="Two-way Fixed Effects Regression Results",
 #          align=TRUE,
 #          #dep.var.labels=c("Bias in Expected cutoffs", "Norm of Bias in Expected cutoffs"),
-#          dep.var.labels=c("Bias in Expected cutoffs"),
+  #          dep.var.labels=c("Bias in Expected cutoffs"),
 #          #single.row=TRUE,
 #          covariate.labels=c(#"Application score",
 #                             #"Application score quadratic",

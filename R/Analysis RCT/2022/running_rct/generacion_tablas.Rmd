@@ -1,0 +1,323 @@
+---
+title: "Untitled"
+output: html_document
+---
+```{r echo=FALSE, message=FALSE, results='hide'}
+rm(list=ls())
+gc()
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+#library(rddtools)
+library(parallel)
+library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(stringi)
+```
+
+```{r}
+dropbox_dir = "~/Dropbox/"
+data_dir <- paste(dropbox_dir, 'Mistakes/Code/Python/Cartillas/data/2022/raw/', sep='')
+outdir <- paste(dropbox_dir, 'Mistakes/Code/Python/Cartillas/outputs/2022/', sep='')
+```
+
+# ================================
+# Preprocesamiento para BBDD
+# ================================
+# Tabla AREA
+```{r}
+bcu <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/raw/ACCESO_BCU-8184.ETAPA2.csv", header=TRUE, sep=';')
+bctp <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/raw/ACCESO_BCTP.csv", header=TRUE, sep=';')
+```
+
+```{r}
+areas_1 <- bcu %>% distinct(AREA_CONOCIMIENTO_SIES)
+areas_2 <- bctp %>% distinct(AREA_CONOCIMIENTO_SIES)
+```
+
+```{r}
+intersect(areas_1$AREA_CONOCIMIENTO_SIES, areas_2$AREA_CONOCIMIENTO_SIES)
+setdiff(areas_1$AREA_CONOCIMIENTO_SIES, areas_2$AREA_CONOCIMIENTO_SIES)
+setdiff(areas_2$AREA_CONOCIMIENTO_SIES, areas_1$AREA_CONOCIMIENTO_SIES)
+```
+
+```{r}
+areas <- areas_1 %>% arrange(AREA_CONOCIMIENTO_SIES) %>% mutate(id = row_number()) %>% dplyr::rename(area_name = AREA_CONOCIMIENTO_SIES) %>% as.data.frame()
+areas <- areas[,c('id', 'area_name')]
+```
+
+```{r}
+write.csv(areas, paste(outdir, "table_areas.csv", sep=''), fileEncoding = "UTF-8", row.names=FALSE)
+```
+
+
+# Mapping COD_IES, COD_SIES, COD_DEMRE
+
+```{r}
+of <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/raw/ACCESO_OFERTA_CENTRALIZADA-8691_V3.csv", header=TRUE, sep=';')
+```
+
+```{r}
+codes <- of %>% dplyr::select(CODIGO_DEMRE, CODIGO_SIES, COD_IES)
+```
+
+```{r}
+write.csv(codes, paste(outdir, "codigos_carreras_ies.csv", sep=''), fileEncoding = "UTF-8", row.names=FALSE)
+```
+
+# Tabla PROGRAM
+```{r}
+bies <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/raw/ACCESO_BIES.csv", header=TRUE, sep=';', fileEncoding= "ISO-8859-1")
+bcu <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/raw/ACCESO_BCU-8184.ETAPA2.csv", header=TRUE, sep=';')
+ccu <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/raw/ACCESO_CCU - 8325.csv", header=TRUE, sep=';', fileEncoding= "ISO-8859-1")
+of <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/raw/ACCESO_OFERTA_CENTRALIZADA-8691.V3.csv", header=TRUE, sep=';', fileEncoding= "ISO-8859-1")
+car <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/carreras.csv", header=TRUE, sep=';', fileEncoding= "ISO-8859-1")
+flf <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2022/first_last_full_with_bea_2020_2021.csv", header=TRUE, sep=',', fileEncoding= "ISO-8859-1")
+ 
+bctp <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/raw/ACCESO_BCTP.csv", header=TRUE, sep=';', fileEncoding= "ISO-8859-1")
+```
+
+```{r}
+major_mapping <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2022/major_key.csv", header=TRUE, sep=',')
+```
+
+```{r}
+colnames(bies)[1] <- 'COD_IES'
+colnames(bcu)[1] <- 'CODIGO_SIES'
+colnames(bctp)[1] <- 'CODIGO_SIES'
+```
+
+```{r}
+ies <- bies %>% dplyr::select(COD_IES, CONDICION_ACREDITACION, ANIOS_ACREDITACION_INS)
+```
+
+
+## Universidades
+
+```{r}
+programs_u <- of %>% dplyr::select(CODIGO_SIES, CODIGO_DEMRE, COD_IES, NOMBRE_SEDE, NOMBRE_CARRERA, VACANTES_REGULARES_TOT, TIPO_POSTULACION)
+programs_u <- merge(programs_u, car %>% dplyr::select(CODIGO_DEMRE, CODIGO_REGION_SEDE, VACANTES_1_SEMESTRE, SOBRECUPO_1_SEMESTRE, VACANTES_2_SEMESTRE, SOBRECUPO_2_SEMESTRE, PUNTAJE_PONDERADO_MINIMO), by="CODIGO_DEMRE")
+programs_u <- merge(programs_u, flf %>% dplyr::select(codigo_carrera, primer_seleccionado_reg_2020, primer_seleccionado_bea_2020, ultimo_seleccionado_reg_2020, ultimo_seleccionado_bea_2020, full_reg_2020, full_bea_2020, primer_seleccionado_reg_2021, primer_seleccionado_bea_2021, ultimo_seleccionado_reg_2021, ultimo_seleccionado_bea_2021, full_reg_2021, full_bea_2021), by.x="CODIGO_DEMRE", by.y="codigo_carrera")
+programs_u <- merge(programs_u, bcu %>% dplyr::select(CODIGO_SIES, CARRERA_GENERICA, TIPO_IES, ANIOS_ACREDITACION_INS, DURACION_ESTUDIOS, DURACION_TITULACION, DURACION_TOTAL, DURACION_FORMAL_PROGRAMA, VALOR_ARANCEL, VALOR_MATRICULA, VALOR_TITULACION, AREA_CONOCIMIENTO_SIES, GRATUIDAD, MODALIDAD, REGION_SEDE, REGIMEN), by="CODIGO_SIES", all.x=TRUE)
+```
+
+```{r}
+regions <- programs_u %>% distinct(CODIGO_REGION_SEDE, REGION_SEDE)
+```
+
+
+## CFT/IP
+
+```{r}
+programs_nu <- bctp %>% dplyr::select(CODIGO_SIES, CARRERA, COD_IES, CARRERA_GENERICA, TIPO_IES, ANIOS_ACREDITACION_INS, DURACION_ESTUDIOS, DURACION_TITULACION, DURACION_TOTAL, DURACION_FORMAL_PROGRAMA, VALOR_ARANCEL, VALOR_MATRICULA, VALOR_TITULACION, AREA_CONOCIMIENTO_SIES, GRATUIDAD, MODALIDAD, REGION_SEDE, REGIMEN) %>% dplyr::rename(NOMBRE_CARRERA = CARRERA)
+```
+
+```{r}
+programs_nu <- merge(programs_nu, regions, by="REGION_SEDE", all.x=TRUE)
+```
+
+```{r}
+cols_to_add <- setdiff(colnames(programs_u), colnames(programs_nu))
+
+for(col in cols_to_add){
+  programs_nu[,col] <- ''
+}
+programs_nu <- programs_nu[,colnames(programs_u)]
+```
+
+```{r}
+programs <- rbind(programs_u, programs_nu)
+
+programs %<>% mutate(TIPO_IES = as.character(TIPO_IES), 
+                     level_id = ifelse(TIPO_IES == "UNIVERSIDAD", 3, ifelse(TIPO_IES == "CENTRO_FORMACION_TECNICA", 1, ifelse(TIPO_IES == "INSTITUTO_PROFESIONAL", 2, ''))), 
+                     accredited_years = str_sub(as.character(ANIOS_ACREDITACION_INS),-1,-1), 
+                     benefits = ifelse(as.character(GRATUIDAD) == 'ADSCRITA', 1, 0))
+
+programs %<>% dplyr::rename(id = CODIGO_SIES, institution_id = COD_IES, region_id = CODIGO_REGION_SEDE, name=NOMBRE_CARRERA, duration = DURACION_TOTAL, tuition = VALOR_ARANCEL, vacancies = VACANTES_REGULARES_TOT, campus_name = NOMBRE_SEDE, duration_type = REGIMEN)
+
+programs %<>% dplyr::select(-ANIOS_ACREDITACION_INS)
+
+programs$institution_id = as.numeric(programs$institution_id)
+```
+
+```{r}
+programs <- merge(programs, areas %>% dplyr::rename(area_id = id), by.x="AREA_CONOCIMIENTO_SIES", by.y="area_name", all.x=TRUE)
+```
+
+## Agregar info BIES
+
+```{r}
+programs <- merge(programs, ies, by.x='institution_id', by.y="COD_IES", all.x=TRUE)
+
+programs %<>% mutate(accredited_years_bies = str_sub(as.character(ANIOS_ACREDITACION_INS),-1,-1),
+                     accredited = ifelse(grepl('NO',as.character(CONDICION_ACREDITACION)), 0, 1))
+```
+
+```{r}
+for(col in colnames(programs)){
+  programs[,col] <- as.character(programs[,col])
+}
+```
+
+```{r}
+programs %<>% mutate(address = '', 
+                     application_type = '', 
+                     shift = '', 
+                     entry_req = '')
+```
+
+## Agregar Major ID
+```{r}
+programs <- merge(programs, major_mapping %>% dplyr::select(CODIGO_SIES, major_ID) %>% dplyr::rename(id = CODIGO_SIES, major_id = major_ID) , by="id",all.x=TRUE)
+```
+
+```{r}
+write.csv(programs %>% dplyr::select(id, institution_id, campus_name, region_id, level_id, address, major_id, name, accredited, accredited_years, duration, duration_type, tuition, application_type, shift, entry_req, benefits, vacancies), paste(outdir, "table_program.csv", sep=''), fileEncoding = "ISO-8859-1", row.names=FALSE)
+```
+
+# Tabla PROGRAM_REPORT
+
+```{r}
+pr_l <- reshape(programs[,c(2,14:25)], direction='long', 
+                 varying=colnames(programs[,14:25]), 
+                 times=c('2020', '2021'),
+                 v.names=c('primer_seleccionado_reg', 'primer_seleccionado_bea','ultimo_seleccionado_reg', 'ultimo_seleccionado_bea', 'full_reg', 'full_bea'),
+                 idvar='id')
+
+colnames(pr_l) <- c("id", "year", "full_bea", "full_reg", "primer_seleccionado_bea", "primer_seleccionado_reg", "ultimo_seleccionado_bea", "ultimo_seleccionado_reg")
+```
+
+```{r}
+pr_l <- merge(pr_l, programs %>% dplyr::select(id, PUNTAJE_PONDERADO_MINIMO), by="id")
+```
+
+```{r}
+pr_l %<>% dplyr::rename(program_id = id, full_vacants = full_reg, full_vacants_bea = full_bea, min_score = ultimo_seleccionado_reg, max_score = primer_seleccionado_reg, min_score_bea = ultimo_seleccionado_bea, min_weigth_score = PUNTAJE_PONDERADO_MINIMO )
+pr_l %<>% dplyr::select(-primer_seleccionado_bea)
+```
+
+```{r}
+pr_l %<>% mutate(real_duration = '', 
+                 retention_rate_year1 = '', 
+                 retention_rate_year2 = '', 
+                 graduation_rate = '', 
+                 graduation_rate_timely = '', 
+                 full = '', 
+                 min_score_pace = '', 
+                 mat_male = '', 
+                 mat_female = '', 
+                 mat_gpa = '', 
+                 mat_ranking = '', 
+                 mat_psu_avg = '', 
+                 mat_psu_diff = '', 
+                 mat_schooltype_mun = '', 
+                 mat_schooltype_psub = '', 
+                 mat_schooltype_pp = '', 
+                 mat_schooltype_ad = '', 
+                 mat_age_avg = '', 
+                 mat_prior_enrollment_school = '', 
+                 mat_prior_enrollment_other= '', 
+                 app_male = '', 
+                 app_female = '', 
+                 app_gpa = '', 
+                 app_ranking = '', 
+                 app_psu_avg = '', 
+                 app_psu_diff = '', 
+                 app_schooltype_mun = '', 
+                 app_schooltype_psub = '', 
+                 app_schooltype_pp = '', 
+                 app_schooltype_ad = '', 
+                 contract_undef_share = '', 
+                 contract_limit_share = '', 
+                 nocontract_share = '', 
+                 hh_income_share_bracket1 = '', 
+                 hh_income_share_bracket2 = '', 
+                 hh_income_share_bracket3 = '', 
+                 hh_income_share_bracket4 = '', 
+                 hh_income_share_bracket5 = '', 
+                 hh_n_adults_0_share = '', 
+                 hh_n_adults_1_share = '', 
+                 hh_n_adults_2_share = '', 
+                 hh_n_adults_3plus_share = ''
+                 )
+```
+
+```{r}
+write.csv(pr_l , paste(outdir, "table_program_report.csv", sep=''), fileEncoding = "ISO-8859-1", row.names=FALSE)
+```
+
+# Table regions
+```{r}
+regions <- read.csv('/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2022/table_regiones.csv', header=TRUE, sep=',' )
+```
+
+```{r}
+write.csv(regions %>%dplyr::select(id, nombre) %>% dplyr::rename(name = nombre) , paste(outdir, "table_region_v2.csv", sep=''), fileEncoding = "ISO-8859-1", row.names=FALSE)
+```
+
+# Table institutions
+
+
+
+```{r}
+inst <- bies %>% mutate(accredited_years = str_sub(as.character(ANIOS_ACREDITACION_INS),-1,-1),
+                     accredited = ifelse(grepl('NO',as.character(CONDICION_ACREDITACION)), 0, 1), 
+                     private = ifelse(grepl('PRIVAD', as.character(TIPO_CLASIFICACION)), 1, 0),
+                     level_id = ifelse(as.character(TIPO_IES) == "UNIVERSIDAD", 3, ifelse(as.character(TIPO_IES) == "CENTRO_FORMACION_TECNICA", 1, ifelse(as.character(TIPO_IES) == "INSTITUTO_PROFESIONAL", 2, ''))),
+                     address = '', 
+                     lat = '',
+                     long = '', 
+                     hours = '', 
+                     min_level = '',
+                     max_level = '', 
+                     integrated = '', 
+                     siblings_priority = '', 
+                     school_gender = '', 
+                     professors_phd = '', 
+                     professors_full_time = '', 
+                     professors_part_time = '', 
+                     language_id = '', 
+                     n_students = '', 
+                     institution_geographic_level2_id = '', 
+                     institution_geographic_level3_id = '', 
+                     distance_to_closest_town = '',
+                     region_id = '', 
+                     sep = '', 
+                     students_classroom = '',
+                     performance_category = '', 
+                     monthy_payment = '', 
+                     school_type = ''
+                     ) %>% 
+  dplyr::rename(id = COD_IES, name = NOMBRE_INSTITUCION, web = WEB) 
+```
+
+```{r}
+write.csv(inst %>% dplyr::select(-c(SIGLA_INSTITUCION, PERIODO_ACREDITACION, TIPO_CLASIFICACION, TIPO_IES,CONDICION_ACREDITACION, ANIOS_ACREDITACION_INS, AREAS_ACREDITADAS, GRATUIDAD, PRESENCIAL_REGIONAL,  OBSERVACION_ACREDITACION_CNA )) , paste(outdir, "table_institution.csv", sep=''), fileEncoding = "ISO-8859-1", row.names=FALSE)
+```
+

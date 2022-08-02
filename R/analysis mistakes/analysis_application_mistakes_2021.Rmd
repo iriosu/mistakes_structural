@@ -1,0 +1,165 @@
+---
+title: "Analysis"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+---
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+rm(list = ls())
+
+library(parallel)
+library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+```
+
+```{r}
+dropbox_dir <- "~/Dropbox/"
+input_path = paste(dropbox_dir, 'Dropout_matching/',sep='')
+setwd(paste(dropbox_dir, "Dropout/Code/R", sep=''))
+```
+
+
+# Load data and Pre-processing
+The data I'm loading here is in long format (one row per student/application), and it includes all students who applied to at least one program (even if they have only invalid applications)
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+df_2021 <- readRDS(paste(dropbox_dir, "Mistakes/Data/intermediate_data/bcd_2021_20210812.rds", sep=''))
+```
+
+```{r}
+colnames(df_2021)
+```
+
+
+```{r}
+for(p in 1:10){
+  if(p < 10){
+    pref = paste("0", as.character(p), sep="")
+  }else{
+    pref = as.character(p)
+  }
+  cc = paste("COD_CARRERA_PREF_", pref, sep="")
+  mc = paste("ESTADO_PREF_", pref, sep="")
+  pp = paste("PTJE_PREF_", pref, sep="")
+  lg = paste("LUGAR_PREF_", pref, sep="")
+  pd = paste("POND_ACAD_PREF_", pref, sep="")
+  
+  df_2021[is.na(df_2021[,cc]), cc] <- 0
+  df_2021[is.na(df_2021[,mc]), mc] <- 0
+  df_2021[is.na(df_2021[,pp]), pp] <- 0
+  df_2021[is.na(df_2021[,lg]), lg] <- 0
+  df_2021[is.na(df_2021[,pd]), pd] <- 0
+}
+```
+
+```{r}
+min(df_2021$number_apps, na.rm=TRUE)
+```
+
+```{r}
+df_2021 %<>% mutate(pref_assigned = ifelse(ESTADO_PREF_01 == 24, 1, 
+                                           ifelse(ESTADO_PREF_02 == 24, 2, 
+                                                  ifelse(ESTADO_PREF_03 == 24, 1, 
+                                                         ifelse(ESTADO_PREF_04 == 24, 1, 
+                                                                ifelse(ESTADO_PREF_05 == 24, 1, 
+                                                                       ifelse(ESTADO_PREF_06 == 24, 1, 
+                                                                              ifelse(ESTADO_PREF_07 == 24, 1, 
+                                                                                     ifelse(ESTADO_PREF_08 == 24, 1, 
+                                                                                            ifelse(ESTADO_PREF_09 == 24, 1, 
+                                                                                                   ifelse(ESTADO_PREF_10 == 24, 1, NA) ) ) )  ) ) ) ) ) ))
+```
+
+```{r}
+df_2021 %<>% mutate(valid_apps = (ESTADO_PREF_01 %in% c(24,25,26)) + (ESTADO_PREF_02 %in% c(24,25,26)) + 
+                                 (ESTADO_PREF_03 %in% c(24,25,26)) + (ESTADO_PREF_04 %in% c(24,25,26)) + 
+                                 (ESTADO_PREF_05 %in% c(24,25,26)) + (ESTADO_PREF_06 %in% c(24,25,26)) + 
+                                 (ESTADO_PREF_07 %in% c(24,25,26)) + (ESTADO_PREF_08 %in% c(24,25,26)) + 
+                                 (ESTADO_PREF_09 %in% c(24,25,26)) + (ESTADO_PREF_10 %in% c(24,25,26)) )
+```
+
+
+
+```{r}
+colnames(df_2021)
+```
+
+```{r}
+df_2021$number_apps
+```
+
+
+```{r}
+df_2021 %>% filter(number_apps > 0) %>% filter(valid_apps < number_apps) %>% tally()
+df_2021 %>% filter(number_apps > 0) %>% filter(valid_apps  == 0) %>% tally()
+df_2021 %>% filter(number_apps > 0) %>% tally()
+df_2021 %>% filter(is.na(number_apps)) %>% tally()
+```
+
+
+
+# Long Panel
+```{r}
+d_2021_l <- reshape(df_2021[,c(2, 225:231,175:224)], direction='long', 
+                    varying=colnames(df_2021[,175:224]), 
+                    times=c('01', '02', '03', '04', '05', '06', '07', '08', '09', '10'),
+                    v.names=c('COD_CARRERA_PREF', 'ESTADO_PREF','PTJE_PREF', 'LUGAR_PREF', 'POND_ACAD_PREF'),
+                    idvar='ID')
+colnames(d_2021_l) <- c("ID", "applied_2021", "assigned_2021", "number_apps", "assigned_to", "assigned_pref", "valid_apps", "pref_assigned", "pref", "codigo_carrera", "marca", "orden", "puntano", "puntpond") # this is just me not knowing how to use reshape
+d_2021_l$puntpond <- ifelse(d_2021_l$puntpond > 10000, d_2021_l$puntpond/100, ifelse(d_2021_l$puntpond > 1000, d_2021_l$puntpond/10, d_2021_l$puntpond))
+```
+
+```{r}
+d_2021_l %<>% arrange(ID, pref)
+```
+
+```{r}
+d_2021_l$marca
+```
+
+```{r}
+d_2021_l %>% filter(marca > 0) %>% group_by(marca) %>% tally() 
+```
+
+```{r}
+d_2021_l %>% filter(marca > 0)%>% filter(marca < 24 | marca > 26) %>% group_by(marca) %>% tally() %>%
+  ggplot(aes(x=marca, y=n)) + geom_bar(stat="identity") + 
+    scale_x_continuous(breaks=seq(0,40,1)) + 
+    scale_y_continuous(expand = c(0, 0), limits = c(0, NA)) +
+    xlab("Marca") + ylab("Frecuencia") +
+    theme_bw() + theme(legend.position = 'bottom', legend.title=element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+ggsave(file=paste(dropbox_dir, '/Mistakes in college admissions/mistakes_and_warnings/presentations/Seminario MINEDUC/plots/distribucion_errores_2021.pdf', sep=""), width=8 , height=4)
+
+```
+
+
+
+
+```{r}
+c21 <- d_2021_l %>% filter(codigo_carrera > 0) %>% group_by(codigo_carrera) %>% dplyr::summarise(year = 2021, num_applicants = n(), num_mistakes = sum(marca < 24 | marca > 26), share_mistakes = sum(marca < 24 | marca > 26)/n(), num_accepted = sum(marca == 24) ) %>% ungroup %>% as.data.frame()
+```
+
+
+```{r}
+c21
+```
+

@@ -1,0 +1,512 @@
+
+---
+title: "Analysis RCT + Survey"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+header-includes:
+   - \usepackage{floatrow}
+   - \floatsetup[figure]{capposition=top}
+---
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+rm(list=ls())
+gc()
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(rlang)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(rddtools)
+library(parallel)
+library(evd)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+#library(tidyverse)
+library(haven)
+library(MASS)
+library(stringi)
+library(openxlsx)
+library(readxl)
+library(kableExtra)
+library(dplyr)
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+my_colors <- RColorBrewer::brewer.pal(4, "Pastel1")[1:2]
+myblue = '#2F5597'
+```
+
+```{r}
+dropbox_dir <- "~/Dropbox/"
+```
+
+# Analysis of RCT + survey --------------------------
+
+Note:
+- Probabilities for the interim porfolios come from the RCT, i.e., with partial applications and randomly completing the market.
+- Probabilities for the final porfolios come from doing bootstrap with final applications. This is not consistent; we should use the same probabilities for interim and final portfolios. Must likely we should use rational expectations considering the final applications.
+- Probabilities for the top and bottom true preferences are evaluated using partial applications + market randomly completed.
+
+## Data
+
+```{r}
+#Read All probabilities with Ratex too (fixed)
+probstrue <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/outputs/2022/probs_for_true_results_fixed_with_ratex.csv", sep=''), sep=',', header=TRUE)
+probsofficial <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/outputs/2022/probs_for_official_results_fixed_with_ratex.csv", sep=''), sep=',', header=TRUE)
+probspartial <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/outputs/2022/probs_for_partial_results_fixed_with_ratex.csv", sep=''), sep=',', header=TRUE)
+#NOTE: probstrue has as pref 1 the top-true pref and pref 2 the bottom-true pref
+
+```
+
+
+```{r}
+df <- readRDS(paste(dropbox_dir,"Mistakes Structural/Code/Python/Cartillas/outputs/2022/master_file_for_analysis_of_rct.csv", sep=''))
+#NOTE: probstrue has as pref 1 the top-true pref and pref 2 the bottom-true pref
+probstrue %<>% dplyr::rename(codigo_carrera_top_true    = codigo_carrera_1,
+                             marca_top_true             = marca_1 ,
+                             puntpond_top_true          = puntpond_1 ,
+                             prob_interim_top_true      = prob_interim_1 ,
+                             prob_adaptive_top_true     = prob_adaptive_1 ,
+                             prob_ratex_top_true        = prob_ratex_1,
+                             codigo_carrera_bottom_true = codigo_carrera_2,
+                             marca_bottom_true          = marca_2 ,
+                             puntpond_bottom_true       = puntpond_2 ,
+                             prob_interim_bottom_true   = prob_interim_2 ,
+                             prob_adaptive_bottom_true  = prob_adaptive_2 ,
+                             prob_ratex_bottom_true     = prob_ratex_2) %>%
+                             select("MRUN",
+                                    "codigo_carrera_top_true",
+                                    "marca_top_true",
+                                    "puntpond_top_true",
+                                    "prob_interim_top_true",
+                                    "prob_adaptive_top_true",
+                                    "prob_ratex_top_true",
+                                    "codigo_carrera_bottom_true",
+                                    "marca_bottom_true",
+                                    "puntpond_bottom_true",
+                                    "prob_interim_bottom_true",
+                                    "prob_adaptive_bottom_true",
+                                    "prob_ratex_bottom_true")
+
+survey <- readRDS(paste(dropbox_dir,"Mistakes Structural/Code/Python/Cartillas/outputs/2022/survey_processed_with_probs.rds", sep=''))
+#NOTE: this file has the subjective beliefs on probabilities (you can confirm this becaise probs have round values)
+# Merge survey with clean probs for toptrue and bottomtrue
+survey = merge(survey, probstrue %>% select(!c("codigo_carrera_top_true", "codigo_carrera_bottom_true","marca_top_true",
+                                               "puntpond_top_true", "marca_bottom_true", "puntpond_bottom_true")), by.x = "mrun", by.y = "MRUN", all.x = TRUE)
+
+dof <- merge(df, survey, by.x="MRUN", by.y="mrun", all.x=TRUE)
+dof <- merge(dof, probsofficial %>% dplyr::select(MRUN,
+                                       overall_interim, overall_adaptive, overall_ratex,
+                                       prob_interim_1, prob_adaptive_1, prob_ratex_1,
+                                       prob_interim_2, prob_adaptive_2, prob_ratex_2,
+                                       prob_interim_3, prob_adaptive_3, prob_ratex_3,
+                                       prob_interim_4, prob_adaptive_4, prob_ratex_4,
+                                       prob_interim_5, prob_adaptive_5, prob_ratex_5,
+                                       prob_interim_6, prob_adaptive_6, prob_ratex_6,
+                                       prob_interim_7, prob_adaptive_7, prob_ratex_7,
+                                       prob_interim_8, prob_adaptive_8, prob_ratex_8,
+                                       prob_interim_9, prob_adaptive_9, prob_ratex_9,
+                                       prob_interim_10, prob_adaptive_10,  prob_ratex_10 ) %>%
+               dplyr::rename(
+                             overall_prob_interim_fin = overall_interim,
+                             overall_prob_adaptive_fin = overall_adaptive,
+                             overall_prob_ratex_fin = overall_ratex,
+                             prob_interim_1_fin  = prob_interim_1, prob_adaptive_1_fin   = prob_adaptive_1,  prob_ratex_1_fin   = prob_ratex_1,
+                             prob_interim_2_fin  = prob_interim_2, prob_adaptive_2_fin   = prob_adaptive_2,  prob_ratex_2_fin   = prob_ratex_2,
+                             prob_interim_3_fin  = prob_interim_3, prob_adaptive_3_fin   = prob_adaptive_3,  prob_ratex_3_fin   = prob_ratex_3,
+                             prob_interim_4_fin  = prob_interim_4, prob_adaptive_4_fin   = prob_adaptive_4,  prob_ratex_4_fin   = prob_ratex_4,
+                             prob_interim_5_fin  = prob_interim_5, prob_adaptive_5_fin   = prob_adaptive_5,  prob_ratex_5_fin   = prob_ratex_5,
+                             prob_interim_6_fin  = prob_interim_6, prob_adaptive_6_fin   = prob_adaptive_6,  prob_ratex_6_fin   = prob_ratex_6,
+                             prob_interim_7_fin  = prob_interim_7, prob_adaptive_7_fin   = prob_adaptive_7,  prob_ratex_7_fin   = prob_ratex_7,
+                             prob_interim_8_fin  = prob_interim_8, prob_adaptive_8_fin   = prob_adaptive_8,  prob_ratex_8_fin   = prob_ratex_8,
+                             prob_interim_9_fin  = prob_interim_9, prob_adaptive_9_fin   = prob_adaptive_9,  prob_ratex_9_fin   = prob_ratex_9,
+                             prob_interim_10_fin = prob_interim_10, prob_adaptive_10_fin = prob_adaptive_10, prob_ratex_10_fin  = prob_ratex_10  ),
+             by="MRUN", all.x=TRUE)
+
+#  Add probabilities for partial portfolios (before the intervention)
+dof <- merge(dof, probspartial %>% dplyr::select(MRUN,
+                                              overall_interim, overall_adaptive, overall_ratex,
+                                              prob_interim_1, prob_adaptive_1, prob_ratex_1,
+                                              prob_interim_2, prob_adaptive_2, prob_ratex_2,
+                                              prob_interim_3, prob_adaptive_3, prob_ratex_3,
+                                              prob_interim_4, prob_adaptive_4, prob_ratex_4,
+                                              prob_interim_5, prob_adaptive_5, prob_ratex_5,
+                                              prob_interim_6, prob_adaptive_6, prob_ratex_6,
+                                              prob_interim_7, prob_adaptive_7, prob_ratex_7,
+                                              prob_interim_8, prob_adaptive_8, prob_ratex_8,
+                                              prob_interim_9, prob_adaptive_9, prob_ratex_9,
+                                              prob_interim_10, prob_adaptive_10,  prob_ratex_10 ) %>%
+                            dplyr::rename(overall_prob_interim_int = overall_interim,
+                                          overall_prob_adaptive_int = overall_adaptive,
+                                          overall_prob_ratex_int = overall_ratex,
+                                          prob_interim_1_int  = prob_interim_1, prob_adaptive_1_int   = prob_adaptive_1,  prob_ratex_1_int   = prob_ratex_1,
+                                          prob_interim_2_int  = prob_interim_2, prob_adaptive_2_int   = prob_adaptive_2,  prob_ratex_2_int   = prob_ratex_2,
+                                          prob_interim_3_int  = prob_interim_3, prob_adaptive_3_int   = prob_adaptive_3,  prob_ratex_3_int   = prob_ratex_3,
+                                          prob_interim_4_int  = prob_interim_4, prob_adaptive_4_int   = prob_adaptive_4,  prob_ratex_4_int   = prob_ratex_4,
+                                          prob_interim_5_int  = prob_interim_5, prob_adaptive_5_int   = prob_adaptive_5,  prob_ratex_5_int   = prob_ratex_5,
+                                          prob_interim_6_int  = prob_interim_6, prob_adaptive_6_int   = prob_adaptive_6,  prob_ratex_6_int   = prob_ratex_6,
+                                          prob_interim_7_int  = prob_interim_7, prob_adaptive_7_int   = prob_adaptive_7,  prob_ratex_7_int   = prob_ratex_7,
+                                          prob_interim_8_int  = prob_interim_8, prob_adaptive_8_int   = prob_adaptive_8,  prob_ratex_8_int   = prob_ratex_8,
+                                          prob_interim_9_int  = prob_interim_9, prob_adaptive_9_int   = prob_adaptive_9,  prob_ratex_9_int   = prob_ratex_9,
+                                          prob_interim_10_int = prob_interim_10, prob_adaptive_10_int = prob_adaptive_10, prob_ratex_10_int  = prob_ratex_10  ),
+                          by="MRUN", all.x=TRUE)
+
+dof %<>% mutate(responded_survey = ifelse(is.na(responded_survey), 0, responded_survey))
+
+#TODO: notice that here we are using as a minimum score the value 0 (we need to change this to the
+# maximum between minimum weighted score requirement and 210)
+of <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/data/2022/seleccion_20_01_22.csv", sep=''))
+car <- read.csv(paste(dropbox_dir, "/Mistakes Structural/Code/Python/Cartillas/data/2022/carreras_v2.csv", sep=''), header=TRUE, sep=";")
+
+#NOTE: Be careful here that we are identifying the columns by their order
+#TODO: We need to check that this order is correct
+of_l <- reshape(of[,c(1,4:53)], direction='long',
+                    varying=colnames(of[,4:53]),
+                    times=c('01', '02', '03', '04', '05', '06', '07', '08', '09', '10'),
+                    v.names=c('cod_carrera_pref', 'estado_pref','ptje_pref', 'lugar_pref', 'pond_acad_pref'),
+                    idvar='mrun')
+colnames(of_l) <- c("mrun", "pref", "codigo_carrera", "marca", "orden", "puntano", "puntpond") # this is just me not knowing how to use reshape
+
+cutoffs <- of_l %>% filter(marca == 24) %>% group_by(codigo_carrera) %>% dplyr::summarise(num_admitted = n(), min_score = pmax(min(puntpond), 210.0))
+car %<>% mutate(VACANTES_REG = VACANTES_1_SEMESTRE + VACANTES_2_SEMESTRE + SOBRECUPO_1_SEMESTRE + SOBRECUPO_2_SEMESTRE)
+car <- merge(car, cutoffs, by.x="CODIGO_DEMRE", by.y="codigo_carrera", all.x=TRUE)
+
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, VACANTES_REG, num_admitted, min_score) %>%
+               mutate(min_score = ifelse(num_admitted < VACANTES_REG, 210.0, min_score)) %>%
+               dplyr::rename(vacants_top_true = VACANTES_REG,
+                             num_admitted_top_true = num_admitted,
+                             min_score_top_true = min_score), by.x="codigo_carrera_top_true", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, VACANTES_REG, num_admitted, min_score) %>%
+               mutate(min_score = ifelse(num_admitted < VACANTES_REG, 210.0, min_score)) %>%
+               dplyr::rename(vacants_bottom_true = VACANTES_REG,
+                             num_admitted_bottom_true = num_admitted,
+                             min_score_bottom_true = min_score), by.x="codigo_carrera_bottom_true", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+dof %<>% mutate(applied_to_top_true_int = ifelse(codigo_carrera_top_true == codigo_carrera_1_int | codigo_carrera_top_true == codigo_carrera_2_int |
+                                              codigo_carrera_top_true == codigo_carrera_3_int | codigo_carrera_top_true == codigo_carrera_4_int |
+                                              codigo_carrera_top_true == codigo_carrera_5_int | codigo_carrera_top_true == codigo_carrera_6_int |
+                                              codigo_carrera_top_true == codigo_carrera_7_int | codigo_carrera_top_true == codigo_carrera_8_int |
+                                              codigo_carrera_top_true == codigo_carrera_9_int | codigo_carrera_top_true == codigo_carrera_10_int, 1, 0),
+                applied_to_bottom_true_int = ifelse(codigo_carrera_bottom_true == codigo_carrera_1_int | codigo_carrera_bottom_true == codigo_carrera_2_int |
+                                              codigo_carrera_bottom_true == codigo_carrera_3_int | codigo_carrera_bottom_true == codigo_carrera_4_int |
+                                              codigo_carrera_bottom_true == codigo_carrera_5_int | codigo_carrera_bottom_true == codigo_carrera_6_int |
+                                              codigo_carrera_bottom_true == codigo_carrera_7_int | codigo_carrera_bottom_true == codigo_carrera_8_int |
+                                              codigo_carrera_bottom_true == codigo_carrera_9_int | codigo_carrera_bottom_true == codigo_carrera_10_int, 1, 0))
+
+dof %<>% mutate(applied_to_top_true_fin = ifelse(codigo_carrera_top_true == codigo_carrera_1_fin | codigo_carrera_top_true == codigo_carrera_2_fin |
+                                              codigo_carrera_top_true == codigo_carrera_3_fin | codigo_carrera_top_true == codigo_carrera_4_fin |
+                                              codigo_carrera_top_true == codigo_carrera_5_fin | codigo_carrera_top_true == codigo_carrera_6_fin |
+                                              codigo_carrera_top_true == codigo_carrera_7_fin | codigo_carrera_top_true == codigo_carrera_8_fin |
+                                              codigo_carrera_top_true == codigo_carrera_9_fin | codigo_carrera_top_true == codigo_carrera_10_fin, 1, 0),
+                applied_to_bottom_true_fin = ifelse(codigo_carrera_bottom_true == codigo_carrera_1_fin | codigo_carrera_bottom_true == codigo_carrera_2_fin |
+                                              codigo_carrera_bottom_true == codigo_carrera_3_fin | codigo_carrera_bottom_true == codigo_carrera_4_fin |
+                                              codigo_carrera_bottom_true == codigo_carrera_5_fin | codigo_carrera_bottom_true == codigo_carrera_6_fin |
+                                              codigo_carrera_bottom_true == codigo_carrera_7_fin | codigo_carrera_bottom_true == codigo_carrera_8_fin |
+                                              codigo_carrera_bottom_true == codigo_carrera_9_fin | codigo_carrera_bottom_true == codigo_carrera_10_fin, 1, 0))
+
+dof %<>% mutate(ordering_mistake_int = ifelse(applied_to_top_true_int == 1 & codigo_carrera_top_true != codigo_carrera_1_fin, 1, 0),
+                ordering_mistake_fin = ifelse(applied_to_top_true_fin == 1 & codigo_carrera_top_true != codigo_carrera_1_fin, 1, 0))
+
+
+#TODO: Check this code with Nacho seems wrong to me
+# dof %<>% rowwise() %>% mutate(min_prob_adaptive_int = min(prob_adaptive_1_int + (codigo_carrera_1_int == 0), prob_adaptive_2_int + (codigo_carrera_2_int == 0),
+#                                                       prob_adaptive_3_int + (codigo_carrera_3_int == 0), prob_adaptive_4_int + (codigo_carrera_4_int == 0),
+#                                                       prob_adaptive_5_int + (codigo_carrera_5_int == 0), prob_adaptive_6_int + (codigo_carrera_6_int == 0),
+#                                                       prob_adaptive_7_int + (codigo_carrera_7_int == 0), prob_adaptive_8_int + (codigo_carrera_8_int == 0),
+#                                                       prob_adaptive_9_int + (codigo_carrera_9_int == 0), prob_adaptive_10_int + (codigo_carrera_10_int == 0)))
+
+# dof %<>% rowwise() %>% mutate(min_prob_adaptive_fin = min(prob_adaptive_1_fin + (codigo_carrera_1_fin == 0), prob_adaptive_2_fin + (codigo_carrera_2_fin == 0),
+#                                                       prob_adaptive_3_fin + (codigo_carrera_3_fin == 0), prob_adaptive_4_fin + (codigo_carrera_4_fin == 0),
+#                                                       prob_adaptive_5_fin + (codigo_carrera_5_fin == 0), prob_adaptive_6_fin + (codigo_carrera_6_fin == 0),
+#                                                       prob_adaptive_7_fin + (codigo_carrera_7_fin == 0), prob_adaptive_8_fin + (codigo_carrera_8_fin == 0),
+#                                                       prob_adaptive_9_fin + (codigo_carrera_9_fin == 0), prob_adaptive_10_fin + (codigo_carrera_10_fin == 0)))
+
+#TODO: Becareful with the sign here, it might not be consistent with the definitions in the paper
+dof %<>% mutate(bias_in_belief_ratex_top_true    = as.numeric(prob_top_true) - as.numeric(prob_ratex_top_true)*100,
+                bias_in_belief_ratex_bottom_true = as.numeric(prob_bottom_true) - as.numeric(prob_ratex_bottom_true)*100)
+#TODO: review this definition
+dof %<>% mutate(bias_in_belief_overall_ratex =  as.numeric(prob_any_pref) - as.numeric(overall_prob_ratex_fin)*100,
+                bias_in_belief_risk_ratex =  (100 - as.numeric(prob_any_pref)) - (1 - as.numeric(overall_prob_ratex_fin))*100)
+hist(dof$bias_in_belief_risk_ratex)
+```
+
+```{r}
+# ELIMINAR PACES HABILITADOS
+paces <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/data/2022/habilitados_pace_v2.csv", sep=''), sep=',', header=TRUE, fileEncoding = 'UTF-8-BOM') #had to add fileencoding option
+paces %<>% mutate(habilitado = ifelse(criterio_1 == 1 & criterio_2 == 1 & criterio_3 == 1, 1, 0))
+paces_ids <- paces %>% filter(habilitado == 1) %>% pull(mrun)
+dof %<>% filter(!(MRUN %in% paces_ids))
+```
+
+
+## Ordering mistakes
+```{r}
+#TODO: we should apply the same filters we used in the previous survey to identify which is the fraction of students who are really declaring their top-true preference
+dof %>% group_by(ordering_mistake_fin) %>% tally()
+# Check if ordering mistakes make sense and correlate with biased beliefs
+dof %>% filter(ordering_mistake_fin == 1) %>% ggplot(aes(x=as.numeric(prob_top_reported)-as.numeric(prob_top_true))) + geom_histogram()
+#NOTE: I am getting then fraction who makes a welfare relevant ordering mistake now
+dof %>% filter(ordering_mistake_fin == 1 & as.numeric(prob_adaptive_top_true) > 0.01 & as.numeric(prob_adaptive_1_fin) > 0.01) %>% ggplot(aes(x=as.numeric(prob_adaptive_1_fin))) + geom_histogram()
+dof %>% filter(ordering_mistake_fin == 1 & as.numeric(prob_ratex_top_true) > 0.01 & as.numeric(prob_ratex_1_fin) > 0.01) %>% ggplot(aes(x=as.numeric(prob_ratex_1_fin))) + geom_histogram()
+# Payoff-relevant ordering mistakes
+tot = dof %>% filter(responded_survey == 1) %>% nrow()
+dof %>% ungroup %>% as.data.frame() %>% filter(applied_to_top_true_fin == 1 & codigo_carrera_top_true != codigo_carrera_1_fin & !is.na(prob_ratex_top_true)) %>%
+              dplyr::summarise(type="Ordering", exante = sum(prob_ratex_top_true > 0.01, na.rm=TRUE), exante_p = 100*sum(prob_ratex_top_true > 0.01, na.rm=TRUE)/tot,
+                               expost = sum(puntpond_top_true >= min_score_top_true, na.rm=TRUE), expost_p = 100*sum(puntpond_top_true >= min_score_top_true, na.rm=TRUE)/tot)
+
+```
+Results:
+- Comparing with belief of adm prob of top reported, many think their chances of admission are lower
+TODO: If we define ordering mistakes
+to be welfare relevant relative to ratex beliefs, I get that around 600 students
+make a payoff relevant ordering mistake in the sample (around 22,000 students),
+which is around 3% (a significant number). We still need to filter students who declare the top-true
+in a way that is inconsistent with theory and the other survey responses. We need
+to see how to deal with measurement error and do not assume all measurement error is a mistake
+
+## Under-confidence mistakes
+```{r}
+dof %>% group_by(applied_to_top_true_fin) %>% tally()
+dof %>% filter(applied_to_top_true_fin == 0) %>% group_by(marca_top_true == 25) %>% tally()
+dof %>% filter(applied_to_top_true_fin == 0 & marca_top_true == 25) %>% group_by(puntpond_top_true >= min_score_top_true, apps_after == 10) %>% tally()
+dof %>% filter(applied_to_top_true_fin == 0 & marca_top_true == 25) %>% group_by(prob_adaptive_top_true > 0.01) %>% tally()
+dof %>% filter(applied_to_top_true_fin == 0 & marca_top_true == 25) %>% group_by(prob_ratex_top_true > 0.01) %>% tally()
+#NOTE: results change drastically if we use as a threshold 0.01 instead of 0.00. We need to change this in all the paper, because we are now using smoothed probabilities
+dof %>% filter(applied_to_top_true_fin == 0 & marca_top_true == 25 & prob_ratex_top_true > 0.01) %>% ggplot(aes(x=prob_ratex_top_true)) + geom_histogram()
+```
+Results
+- We need to check how this changes with the clean definition of top-true
+
+```{r}
+dof %>% filter(applied_to_top_true_fin == 0 & marca_top_true == 25 & puntpond_top_true >= min_score_top_true) %>% group_by(reason_skip_top_true) %>% tally() %>% arrange(-n)
+```
+
+## Over-confidence mistakes
+```{r}
+dof %>% group_by(bottom_true_any) %>% tally()
+#TODO: we have one observation that seems to declare a bottom_true as a program in their list. I think this
+#shouldn't be the case, but we have to check whether maybe this was still possible and not blocked
+# in the survey design
+dof %>% group_by(applied_to_bottom_true_fin) %>% tally()
+dof %>% filter(applied_to_bottom_true_fin == 0) %>% group_by(marca_bottom_true == 25) %>% tally()
+dof %>% filter(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25) %>% group_by(assigned_oficial) %>% tally()
+dof %>% filter(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & assigned_oficial == 0) %>% group_by(puntpond_bottom_true > min_score_bottom_true) %>% tally()
+dof %>% filter(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & assigned_oficial == 0) %>% group_by(prob_adaptive_bottom_true > 0.01) %>% tally()
+dof %>% filter(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & assigned_oficial == 0) %>% group_by(prob_ratex_bottom_true > 0.01) %>% tally()
+dof %>% filter(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & overall_prob_adaptive_fin < 0.99) %>% group_by(prob_adaptive_bottom_true > 0.01) %>% tally()
+dof %>% filter(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & overall_prob_ratex_fin < 0.99) %>% group_by(prob_ratex_bottom_true > 0.01) %>% tally()
+
+```
+
+
+## Tables
+```{r, echo=FALSE, message=FALSE, warning=FALSE, results='asis'}
+tot = dof %>% filter(responded_survey == 1) %>% nrow()
+kable(rbind(dof %>% ungroup %>% as.data.frame() %>% filter(applied_to_top_true_fin == 0 & marca_top_true == 25 & !is.na(prob_ratex_top_true)) %>%
+              dplyr::summarise(type="Underconfidence", exante = sum(prob_ratex_top_true > 0.01, na.rm = TRUE), exante_p = 100*sum(prob_ratex_top_true > 0.01, na.rm = TRUE)/tot,
+                               expost = sum(puntpond_top_true >= min_score_top_true, na.rm = TRUE), expost_p = 100*sum(puntpond_top_true >= min_score_top_true, na.rm = TRUE)/tot),
+            dof %>% ungroup %>% as.data.frame() %>% filter(applied_to_top_true_fin == 1 & codigo_carrera_top_true != codigo_carrera_1_fin & !is.na(prob_ratex_top_true)) %>%
+              dplyr::summarise(type="Ordering", exante = sum(prob_ratex_top_true > 0.01, na.rm=TRUE), exante_p = 100*sum(prob_ratex_top_true > 0.01, na.rm=TRUE)/tot,
+                               expost = sum(puntpond_top_true >= min_score_top_true, na.rm=TRUE), expost_p = 100*sum(puntpond_top_true >= min_score_top_true, na.rm=TRUE)/tot),
+            #dof %>% ungroup %>% as.data.frame() %>% filter(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & assigned_fin == 0)  %>%
+            dof %>% ungroup %>% as.data.frame() %>% filter(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & overall_prob_ratex_fin < 0.99 & !is.na(prob_ratex_bottom_true))  %>%
+              dplyr::summarise(type="Overconfidence", exante = sum(prob_ratex_bottom_true > 0.01), exante_p = 100*sum(prob_ratex_bottom_true > 0.01)/tot,
+                               expost = sum(puntpond_bottom_true > min_score_bottom_true & assigned_fin == 0), expost_p = 100*sum(puntpond_bottom_true > min_score_bottom_true & assigned_fin == 0)/tot) ),
+      digits=3, "latex", booktabs = TRUE, row.names=FALSE, escape=F,
+      caption="Strategic Mistakes \\label{tab: summary strategic mistakes}", position = "!htp",
+      col.names=c("Type", "N", "\\%", "N", "\\%"), linesep = "",
+      align=c('l', 'c', 'c', 'c', 'c')) %>%
+      add_header_above(c(" " = 1, "Ex-Ante" = 2, "Ex-Post" = 2)) %>%
+      footnote(general="Sample considers all students who responded the survey.",
+               general_title="Note:",
+               footnote_as_chunk=T) %>%
+  save_kable(paste(dropbox_dir,"Mistakes Structural/Code/R/tables/frequency_of_mistakes_within_survey.tex", sep=''))
+  #save_kable(paste(dropbox_dir, "Mistakes/Code/R/tables/frequency_of_mistakes_within_survey.tex", sep=''))
+```
+
+```{r}
+rbind(dof %>% ungroup %>% as.data.frame() %>% filter(applied_to_top_true_fin == 0 & marca_top_true == 25) %>%
+              dplyr::summarise(type="Underconfidence", exante = sum(prob_ratex_top_true > 0.01, na.rm=TRUE), exante_p = 100*sum(prob_ratex_top_true > 0.01, na.rm=TRUE)/tot,
+                               expost = sum(puntpond_top_true >= min_score_top_true), expost_p = 100*sum(puntpond_top_true >= min_score_top_true)/tot),
+            dof %>% ungroup %>% as.data.frame() %>% filter(applied_to_top_true_fin == 1 & codigo_carrera_top_true != codigo_carrera_1_fin) %>%
+              dplyr::summarise(type="Ordering", exante = sum(prob_ratex_top_true > 0.01, na.rm=TRUE), exante_p = 100*sum(prob_ratex_top_true > 0.01, na.rm=TRUE)/tot,
+                               expost = sum(puntpond_top_true >= min_score_top_true, na.rm=TRUE), expost_p = 100*sum(puntpond_top_true >= min_score_top_true, na.rm=TRUE)/tot),
+            #dof %>% ungroup %>% as.data.frame() %>% filter(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & assigned_fin == 0)  %>%
+            dof %>% ungroup %>% as.data.frame() %>% filter(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & overall_prob_ratex_fin < 0.99)  %>%
+              dplyr::summarise(type="Overconfidence", exante = sum(prob_ratex_bottom_true > 0.01), exante_p = 100*sum(prob_ratex_bottom_true > 0.01)/tot,
+                               expost = sum(puntpond_bottom_true > min_score_bottom_true & assigned_fin == 0), expost_p = 100*sum(puntpond_bottom_true > min_score_bottom_true & assigned_fin == 0)/tot))
+```
+
+
+```{r}
+#TODO: I think here we are  completely underpowered to interpret any sort of analysis by mistake type
+# We could explore the following alternatives
+# 1) Pooling all treatment arms
+# 2) Pooling mistake types
+
+#Here we are pooling by mistake type to gain power. We are still underpowered to do any sensitive analysis here.
+dof %>% filter(responded_survey == 1) %>% group_by(treatment, open) %>%
+              dplyr::summarise(tot = n(),
+                               exante_b = sum(applied_to_top_true_int == 0 & marca_top_true == 25 & prob_ratex_top_true > 0.01, na.rm=TRUE) +
+                                          sum(applied_to_top_true_int == 1 & codigo_carrera_top_true != codigo_carrera_1_int & prob_ratex_top_true > 0.01, na.rm=TRUE) +
+                                          sum(applied_to_bottom_true_int == 0 & marca_bottom_true == 25 & overall_prob_ratex_int < 0.99 & prob_ratex_bottom_true > 0.01, na.rm=TRUE),
+                               exante_a = sum(applied_to_top_true_fin == 0 & marca_top_true == 25 & prob_ratex_top_true > 0.01, na.rm=TRUE) +
+                                          sum(applied_to_top_true_fin == 1 & codigo_carrera_top_true != codigo_carrera_1_fin & prob_ratex_top_true > 0.01, na.rm=TRUE) +
+                                          sum(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & overall_prob_ratex_fin < 0.99 & prob_ratex_bottom_true > 0.01, na.rm=TRUE),
+                               exante_p = 100*(exante_a-exante_b)/exante_b)
+                               #expost_b = sum(applied_to_top_true_int == 0 & marca_top_true == 25 & puntpond_top_true >= min_score_top_true, na.rm=TRUE),
+                               #expost_a = sum(applied_to_top_true_fin == 0 & marca_top_true == 25 & puntpond_top_true >= min_score_top_true, na.rm=TRUE),
+                               #expost_p = 100*(expost_a-expost_b)/expost_b)
+```
+## Doing a formal regression to see whether the treatments reduce mistakes (completely underpowered, just noise)
+```{r}
+#TODO: check that this filter is correct (check the NAs)
+d_mistakes_treatments = dof %>% filter(responded_survey == 1 & open == 1) %>% mutate(
+                               #Strategic mistakes partial portfolios
+                               underconfidence_exante_int = ifelse(applied_to_top_true_int == 0 & marca_top_true == 25 & prob_ratex_top_true > 0.01, 1, 0),
+                               ordering_exante_int = ifelse(applied_to_top_true_int == 1 & codigo_carrera_top_true != codigo_carrera_1_int & prob_ratex_top_true > 0.01, 1, 0),
+                               overconfidence_exante_int = ifelse(applied_to_bottom_true_int == 0 & marca_bottom_true == 25 & overall_prob_ratex_int < 0.99 & prob_ratex_bottom_true > 0.01, 1, 0),
+                               mistake_any_exante_int = ifelse(underconfidence_exante_int + ordering_exante_int + overconfidence_exante_int > 0, 1, 0),
+                               #Strategic mistakes final portfolios
+                               underconfidence_exante_fin = ifelse(applied_to_top_true_fin == 0 & marca_top_true == 25 & prob_ratex_top_true > 0.01, 1, 0),
+                               ordering_exante_fin = ifelse(applied_to_top_true_fin == 1 & codigo_carrera_top_true != codigo_carrera_1_fin & prob_ratex_top_true > 0.01, 1, 0),
+                               overconfidence_exante_fin = ifelse(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & overall_prob_ratex_fin < 0.99 & prob_ratex_bottom_true > 0.01, 1, 0),
+                               mistake_any_exante_fin = ifelse(underconfidence_exante_fin + ordering_exante_fin + overconfidence_exante_fin > 0, 1, 0),
+                               has_bottom_true_fin = ifelse(applied_to_bottom_true_fin == 0, 1, 0),
+                               applied_to_top_true_relevant_fin = ifelse(applied_to_top_true_fin == 1 & prob_ratex_top_true > 0.01, 1, 0),
+                               mistake_any_exante_dec = ifelse(mistake_any_exante_fin < mistake_any_exante_int, 1, 0),
+                               underconfidence_exante_dec = ifelse(underconfidence_exante_fin < underconfidence_exante_int, 1, 0),
+                               overconfidence_exante_dec = ifelse(overconfidence_exante_fin < overconfidence_exante_int, 1, 0),
+                               overall_prob_ratex_inc = ifelse(overall_prob_ratex_fin > overall_prob_ratex_int, 1, 0))
+d_mistakes_treatments %>% dplyr::summarise(tot = n(),
+                                           underconfidence_exante_p_int = 100*mean(underconfidence_exante_int),
+                                           underconfidence_exante_p_fin = 100*mean(underconfidence_exante_fin),
+                                           overconfidence_exante_p_int = 100*mean(overconfidence_exante_int),
+                                           overconfidence_exante_p_fin = 100*mean(overconfidence_exante_fin),
+                                           ordering_exante_p_int = 100*mean(ordering_exante_int),
+                                           ordering_exante_p_fin = 100*mean(ordering_exante_fin),
+                                           mistake_any_exante_p_int = 100*mean(mistake_any_exante_int),
+                                           mistake_any_exante_p_fin = 100*mean(mistake_any_exante_fin))
+#Run regresion to see the treatment effects
+# Any mistake
+mistakes_reg = lm(data = as.data.frame(d_mistakes_treatments), mistake_any_exante_fin ~ factor(treatment))
+summary(mistakes_reg)
+mistakes_dec_reg = lm(data = as.data.frame(d_mistakes_treatments), mistake_any_exante_dec ~ factor(treatment))
+summary(mistakes_dec_reg)
+# Now looking only at people who made some mistake in the partial application
+mistakes_dec_reg = lm(data = as.data.frame(d_mistakes_treatments %>% filter(mistake_any_exante_int == 1)), mistake_any_exante_dec ~ factor(treatment))
+summary(mistakes_dec_reg)
+# Underconfidence mistake
+mistakes_reg = lm(data = as.data.frame(d_mistakes_treatments), underconfidence_exante_fin ~ factor(treatment))
+summary(mistakes_reg)
+mistakes_dec_reg = lm(data = as.data.frame(d_mistakes_treatments), underconfidence_exante_dec ~ factor(treatment))
+summary(mistakes_dec_reg)
+# Now looking only at people who made some mistake in the partial application
+mistakes_dec_reg = lm(data = as.data.frame(d_mistakes_treatments %>% filter(underconfidence_exante_int == 1)), underconfidence_exante_dec ~ factor(treatment))
+summary(mistakes_dec_reg)
+# Overconfidence mistake
+mistakes_reg = lm(data = as.data.frame(d_mistakes_treatments), overconfidence_exante_fin ~ factor(treatment))
+summary(mistakes_reg)
+mistakes_dec_reg = lm(data = as.data.frame(d_mistakes_treatments), overconfidence_exante_dec ~ factor(treatment))
+summary(mistakes_dec_reg)
+# Now looking only at people who made some mistake in the partial application
+mistakes_dec_reg = lm(data = as.data.frame(d_mistakes_treatments %>% filter(overconfidence_exante_int == 1)), overconfidence_exante_dec ~ factor(treatment))
+summary(mistakes_dec_reg)
+
+#Now looking at top-true and bottom-true partial versus final applications and risk measures and biased beliefs
+mistakes_reg = lm(data = as.data.frame(d_mistakes_treatments), applied_to_top_true_fin ~ factor(treatment))
+summary(mistakes_reg)
+mistakes_reg = lm(data = as.data.frame(d_mistakes_treatments), applied_to_top_true_relevant_fin ~ factor(treatment))
+summary(mistakes_reg)
+mistakes_reg = lm(data = as.data.frame(d_mistakes_treatments), has_bottom_true_fin ~ factor(treatment))
+summary(mistakes_reg)
+#NOTE: we have a problem here, it seems that treatments 2 and 4 reduce the probability of including a top-true pref even among relevant ones
+#TODO: do robustness checks on this (filtering the inconsistent types)
+
+#Now looking at reduction in risk
+mistakes_reg = lm(data = as.data.frame(d_mistakes_treatments), overall_prob_ratex_fin ~ factor(treatment))
+summary(mistakes_reg)
+mistakes_reg = lm(data = as.data.frame(d_mistakes_treatments), overall_prob_ratex_inc ~ factor(treatment))
+summary(mistakes_reg)
+mistakes_reg = lm(data = as.data.frame(d_mistakes_treatments %>% filter(overall_prob_ratex_int < 0.99)), overall_prob_ratex_inc ~ factor(treatment))
+summary(mistakes_reg)
+mistakes_reg = lm(data = as.data.frame(d_mistakes_treatments %>% filter(general_message == 2)), overall_prob_ratex_inc ~ factor(treatment))
+summary(mistakes_reg)
+mistakes_reg = lm(data = as.data.frame(dof %>% filter(open == 1 & general_message == 2)), overall_prob_ratex_fin ~ factor(treatment))
+summary(mistakes_reg)
+mistakes_reg = lm(data = as.data.frame(dof %>% filter(open == 1 & general_message == 2)), assigned_oficial ~ factor(treatment))
+summary(mistakes_reg)
+#TODO: there is something weird here. I get insignificant results with risk measures, but we know that we had significant effect in improving assignments (tables below)
+#TODO: DISCUSS THIS WITH NACHO
+
+```
+
+
+```{r}
+#NOTE: We are completely underpowered here! I don't think there is anything we can do about it
+
+kable(rbind(
+         dof %>% filter(responded_survey == 1) %>% group_by(treatment) %>%
+              dplyr::summarise(tot = n(),
+                               exante_b = sum(applied_to_top_true_int == 0 & marca_top_true == 25 & prob_ratex_top_true > 0.01, na.rm=TRUE),
+                               exante_a = sum(applied_to_top_true_fin == 0 & marca_top_true == 25 & prob_ratex_top_true > 0.01, na.rm=TRUE),
+                               exante_p = 100*(exante_a-exante_b)/exante_b,
+                               expost_b = sum(applied_to_top_true_int == 0 & marca_top_true == 25 & puntpond_top_true >= min_score_top_true, na.rm=TRUE),
+                               expost_a = sum(applied_to_top_true_fin == 0 & marca_top_true == 25 & puntpond_top_true >= min_score_top_true, na.rm=TRUE),
+                               expost_p = 100*(expost_a-expost_b)/expost_b),
+         dof %>% filter(responded_survey == 1) %>% group_by(treatment) %>%
+              dplyr::summarise(tot = n(),
+                               exante_b = sum(applied_to_top_true_int == 1 & codigo_carrera_top_true != codigo_carrera_1_int & prob_ratex_top_true > 0.01, na.rm=TRUE),
+                               exante_a = sum(applied_to_top_true_fin == 1 & codigo_carrera_top_true != codigo_carrera_1_fin & prob_ratex_top_true > 0.01, na.rm=TRUE),
+                               exante_p = 100*(exante_a-exante_b)/exante_b,
+                               expost_b = sum(applied_to_top_true_int == 1 & codigo_carrera_top_true != codigo_carrera_1_int & puntpond_top_true >= min_score_top_true, na.rm=TRUE),
+                               expost_a = sum(applied_to_top_true_fin == 1 & codigo_carrera_top_true != codigo_carrera_1_fin & puntpond_top_true >= min_score_top_true, na.rm=TRUE),
+                               expost_p = 100*(expost_a-expost_b)/expost_b),
+        dof %>% filter(responded_survey == 1) %>% group_by(treatment) %>%
+              dplyr::summarise(tot = n(),
+                               exante_b = sum(applied_to_bottom_true_int == 0 & marca_bottom_true == 25 &  overall_prob_ratex_int < 0.99 & prob_ratex_bottom_true > 0.01, na.rm=TRUE),
+                               exante_a = sum(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & overall_prob_ratex_fin < 0.99 & prob_ratex_bottom_true > 0.01, na.rm=TRUE),
+                               exante_p = 100*(exante_a-exante_b)/exante_b,
+                               expost_b = sum(applied_to_bottom_true_int == 0 & marca_bottom_true == 25 & assigned_int == 0 & puntpond_bottom_true >= min_score_bottom_true, na.rm=TRUE),
+                               expost_a = sum(applied_to_bottom_true_fin == 0 & marca_bottom_true == 25 & assigned_fin == 0 & puntpond_bottom_true >= min_score_bottom_true, na.rm=TRUE),
+                               expost_p = 100*(expost_a-expost_b)/expost_b,)
+      ),
+      digits=3, "latex", booktabs = TRUE, row.names=FALSE, escape=F,
+      caption="Strategic Mistakes \\label{tab: summary strategic mistakes}", position = "!htp",
+      col.names=c("Treatment", "N", "Before", "After", "Diff. [\\%]", "Before", "After", "Diff. [\\%]"), linesep = "",
+      align=c('l', 'c', 'c', 'c', 'c', 'c', 'c', 'c')) %>%
+      add_header_above(c(" " = 2, "Ex-Ante" = 3, "Ex-Post" = 3)) %>%
+      pack_rows(index=c("Underconfidence"=4, "Ordering"=4, "Overconfidence"=4) ) %>%
+      footnote(general="Sample considers all students who responded the survey.",
+               general_title="Note:",
+               footnote_as_chunk=T) %>%
+  save_kable(paste(dropbox_dir,"Mistakes Structural/Code/R/tables/change_strategic_mistakes_within_survey_by_treatment.tex", sep=''))
+
+```
+
+

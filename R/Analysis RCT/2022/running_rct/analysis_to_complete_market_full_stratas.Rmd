@@ -1,0 +1,473 @@
+---
+title: "Analysis"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+---
+
+# This script calculates how to complete the market with the interim applications of the RCT using many stratas
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+rm(list=ls())
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(rddtools)
+library(parallel)
+library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(anytime)
+```
+
+# Load information from previous years to set targets
+```{r}
+#dropbox_dir = "~/Dropbox/"
+students19 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2019/A_INSCRITOS_PUNTAJES_PSU_2019_PUB_MRUN.csv", sep=';', header=TRUE)
+applications19 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2019/C_POSTULANTES_SELECCION_PSU_2019_PUB_MRUN.csv", sep=';', header=TRUE)
+students20 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2020/A_INSCRITOS_PUNTAJES_PSU_2020_PUB_MRUN.csv", sep=';', header=TRUE)
+applications20 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2020/C_POSTULANTES_SELECCION_PSU_2020_PUB_MRUN.csv", sep=';', header=TRUE)
+students21 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/A_INSCRITOS_PUNTAJES_PDT_2021_PUB_MRUN.csv", sep=';', header=TRUE)
+applications21 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/C_POSTULANTES_SELECCION_PDT_2021_PUB_MRUN.csv", sep=';', header=TRUE)
+apps_all_21 <- read.csv('~/Dropbox/Mistakes_in_college_admissions/mistakes_and_warnings/data/2021/210217 Reporte Postulaciones MRUN v2 CB.csv', sep=',', header=TRUE)
+```
+
+
+# Analyze distribution of applications per time of the day and day for previous year (2021)
+#NOTE: this is only for the group of students whi took PDT on 2021
+
+```{r}
+#TODO: Check the timezone of the output of Chris!
+#TODO: use regular expression for this to be more pro
+apps_all_21 %<>% mutate(fecha_modified = gsub(" 9\\:"," 09:",FECHA_POSTULACION))
+apps_all_21 %<>% mutate(fecha_modified = gsub(" 8\\:"," 08:",fecha_modified))
+apps_all_21 %<>% mutate(fecha_modified = gsub(" 7\\:"," 07:",fecha_modified))
+apps_all_21 %<>% mutate(fecha_modified = gsub(" 6\\:"," 06:",fecha_modified))
+apps_all_21 %<>% mutate(fecha_modified = gsub(" 5\\:"," 05:",fecha_modified))
+apps_all_21 %<>% mutate(fecha_modified = gsub(" 4\\:"," 04:",fecha_modified))
+apps_all_21 %<>% mutate(fecha_modified = gsub(" 3\\:"," 03:",fecha_modified))
+apps_all_21 %<>% mutate(fecha_modified = gsub(" 2\\:"," 02:",fecha_modified))
+apps_all_21 %<>% mutate(fecha_modified = gsub(" 1\\:"," 01:",fecha_modified))
+apps_all_21 %<>% mutate(fecha_modified = gsub(" 0\\:"," 00:",fecha_modified))
+apps_all_21 %<>% mutate(fecha_modified = anytime(fecha_modified))
+hist(as.Date(apps_all_21$FECHA_POSTULACION, tryFormats = c("%Y-%m-%d %H:%M")), breaks = "days")
+ggplot(apps_all_21, aes(fecha_modified)) +
+  geom_histogram(bins = 100) +
+  geom_vline(xintercept = anytime("2021-02-13 23:00")) +
+  geom_vline(xintercept = anytime("2021-02-14 11:49"))
+#TODO: check that these times are in Chilean time
+
+# Check the distribution of applications
+p = ggplot(apps_all_21 %>% mutate(application_initial = ifelse(NRO_POSTULACION == 1, 1, 0)),
+                               aes(fecha_modified, fill = as.factor(application_initial))) +
+  geom_histogram(bins = 50, position = "dodge") +
+  geom_vline(xintercept = anytime("2021-02-13 23:00"), linetype = "longdash") +
+  geom_text(x = anytime("2021-02-13 23:00"), y = 5000, label = "Sample \n intervention") +
+  geom_vline(xintercept = anytime("2021-02-14 11:49"), linetype = "longdash" ) +
+  geom_text(x = anytime("2021-02-14 11:49"), y = 5000, label = "Email") +
+  xlab("date") +
+  scale_fill_brewer(palette="Pastel1",
+                    name="Application",
+                    breaks = c(1,
+                               0),
+                    labels = c("Initial",
+                               "Modified")) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank())
+p
+```
+
+
+#Compute fraction of initial applications submited until 23:00 of the second day
+```{r}
+nrow(apps_all_21)
+apps_first_21 = apps_all_21 %>% subset(NRO_POSTULACION == 1)
+apps_tot = nrow(apps_first_21)
+#TODO: MODIFY THIS!
+apps_first_before_21 = apps_first_21 %>% filter(anytime(FECHA_POSTULACION) < "2021-02-12 23:00")
+apps_partial = nrow(apps_first_before_21)
+K = apps_partial/apps_tot
+K  
+#Plot
+ggplot(apps_first_before_21 %>% mutate(application_initial = ifelse(NRO_POSTULACION == 1, 1, 0)),
+                               aes(fecha_modified, fill = as.factor(application_initial))) +
+  geom_histogram(bins = 50, position = "dodge") +
+  xlab("date") +
+  scale_fill_brewer(palette="Pastel1",
+                    name="Application",
+                    breaks = c(1,
+                               0),
+                    labels = c("Initial",
+                               "Modified")) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank())
+
+```
+
+
+
+
+
+
+```{r}
+applications19 %>% nrow()
+applications20 %>% nrow()
+applications21 %>% nrow()
+#According to the pdf   Reporte 11-02 23.01 hrs.pdf, there were 75,349 active applications at the end of first day 
+#K = 75349/nrow(applications21)
+#According to the pdf   Reporte 12-02 23.01 hrs.pdf, there were 95.199 active applications at the end of second day 
+#TODO: USE THIS K FOR THE FINAL RUN AT THE END OF THE SECOND DAY
+K = 95199/nrow(applications21)
+K
+top_growth = 0.1*nrow(applications21)
+```
+
+
+
+```{r}
+applications19$applied = 1
+applications20$applied = 1
+applications21$applied = 1
+applications19 %<>% mutate(assigned = (ESTADO_PREF_01 == 24) + (ESTADO_PREF_02 == 24) + (ESTADO_PREF_03 == 24) + (ESTADO_PREF_04 == 24) + (ESTADO_PREF_05 == 24) +
+                                      (ESTADO_PREF_06 == 24) + (ESTADO_PREF_07 == 24) + (ESTADO_PREF_08 == 24) + (ESTADO_PREF_09 == 24) + (ESTADO_PREF_10 == 24) )
+applications20 %<>% mutate(assigned = (ESTADO_PREF_01 == 24) + (ESTADO_PREF_02 == 24) + (ESTADO_PREF_03 == 24) + (ESTADO_PREF_04 == 24) + (ESTADO_PREF_05 == 24) +
+                                      (ESTADO_PREF_06 == 24) + (ESTADO_PREF_07 == 24) + (ESTADO_PREF_08 == 24) + (ESTADO_PREF_09 == 24) + (ESTADO_PREF_10 == 24) )
+applications21 %<>% mutate(assigned = (ESTADO_PREF_01 == 24) + (ESTADO_PREF_02 == 24) + (ESTADO_PREF_03 == 24) + (ESTADO_PREF_04 == 24) + (ESTADO_PREF_05 == 24) +
+                                      (ESTADO_PREF_06 == 24) + (ESTADO_PREF_07 == 24) + (ESTADO_PREF_08 == 24) + (ESTADO_PREF_09 == 24) + (ESTADO_PREF_10 == 24) )
+```
+
+
+```{r}
+students19 <- merge(students19, applications19[,c("MRUN", "applied", "assigned")], by='MRUN', all.x=TRUE)
+students19$applied[is.na(students19$applied)] <- 0
+students19$assigned[is.na(students19$assigned)] <- 0
+students20 <- merge(students20, applications20[,c("MRUN", "applied", "assigned")], by='MRUN', all.x=TRUE)
+students20$applied[is.na(students20$applied)] <- 0
+students20$assigned[is.na(students20$assigned)] <- 0
+students21 <- merge(students21, applications21[,c("MRUN", "applied", "assigned")], by='MRUN', all.x=TRUE)
+students21$applied[is.na(students21$applied)] <- 0
+students21$assigned[is.na(students21$assigned)] <- 0
+```
+
+```{r}
+#students19 %>% group_by(assigned) %>% tally()
+#students20 %>% group_by(assigned) %>% tally()
+students19 %>% group_by(assigned) %>% summarise(n = n()) %>% mutate(share = n/sum(n))
+students20 %>% group_by(assigned) %>% summarise(n = n()) %>% mutate(share = n/sum(n))
+students21 %>% group_by(assigned) %>% summarise(n = n()) %>% mutate(share = n/sum(n))
+
+#124451/(124451+181601)
+#116047/(116047+192488)
+```
+
+
+```{r}
+#Checking vars
+describe(students19$PROMLM_ACTUAL)
+describe(students19$PROMLM_ANTERIOR)
+describe(students20$PROMLM_ACTUAL)
+describe(students20$PROMLM_ANTERIOR)
+describe(students21$PROM_CM_ACTUAL)
+describe(students21$PROMLM_ANTERIOR)
+is.factor(students19$PROMLM_ACTUAL)
+is.factor(students19$PROMLM_ANTERIOR)
+is.factor(students20$PROMLM_ACTUAL)
+is.factor(students20$PROMLM_ANTERIOR)
+is.factor(students21$PROM_CM_ACTUAL)
+is.factor(students21$PROMLM_ANTERIOR)
+sum(is.na(students19$PROMLM_ACTUAL))
+sum(is.na(students19$PROMLM_ANTERIOR))
+sum(is.na(students20$PROMLM_ACTUAL))
+sum(is.na(students20$PROMLM_ANTERIOR))
+sum(is.na(students21$PROM_CM_ACTUAL))
+sum(is.na(students21$PROMLM_ANTERIOR))
+```
+
+```{r}
+#Parssing factor strings to numerics
+students19 %<>% mutate(PROMLM_ACTUAL = as.numeric(as.character(str_replace_all(PROMLM_ACTUAL, ",", "."))))
+students19 %<>% mutate(PROMLM_ANTERIOR = as.numeric(as.character(str_replace_all(PROMLM_ANTERIOR, ",", "."))))
+students20 %<>% mutate(PROMLM_ACTUAL = as.numeric(as.character(str_replace_all(PROMLM_ACTUAL, ",", "."))))
+students20 %<>% mutate(PROMLM_ANTERIOR = as.numeric(as.character(str_replace_all(PROMLM_ANTERIOR, ",", "."))))
+students21 %<>% mutate(PROM_CM_ACTUAL = as.numeric(as.character(str_replace_all(PROM_CM_ACTUAL, ",", "."))))
+students21 %<>% mutate(PROMLM_ANTERIOR = as.numeric(as.character(str_replace_all(PROMLM_ANTERIOR, ",", "."))))
+#Checks
+sum(is.na(students19$PROMLM_ACTUAL))
+sum(is.na(students19$PROMLM_ANTERIOR))
+sum(is.na(students20$PROMLM_ACTUAL))
+sum(is.na(students20$PROMLM_ANTERIOR))
+sum(is.na(students21$PROM_CM_ACTUAL))
+sum(is.na(students21$PROMLM_ANTERIOR))
+summary(students19$PROMLM_ACTUAL)
+summary(students19$PROMLM_ANTERIOR)
+summary(students20$PROMLM_ACTUAL)
+summary(students20$PROMLM_ANTERIOR)
+summary(students21$PROM_CM_ACTUAL)
+summary(students21$PROMLM_ANTERIOR)
+hist(students19$PROMLM_ACTUAL)
+hist(students19$PROMLM_ANTERIOR)
+hist(students20$PROMLM_ACTUAL)
+hist(students20$PROMLM_ANTERIOR)
+hist(students21$PROM_CM_ACTUAL)
+hist(students21$PROMLM_ANTERIOR)
+```
+
+# Create Stratas
+
+```{r}
+ students19 %<>% mutate(
+   strata_score = ifelse(pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) < 450 , 1,
+        ifelse(pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) >= 450 & pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) < 600 , 2,
+        ifelse( pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) >= 600, 3, NA))),
+   strata_sexo = COD_SEXO,
+   strata_region = ifelse(CODIGO_REGION_EGRESO %in% c(1,2,3,4,15), 1,
+   ifelse(CODIGO_REGION_EGRESO %in% c(5,6,7,13), 2,
+   ifelse(CODIGO_REGION_EGRESO %in% c(8,9,10,11,12,14,16), 3, 4))))
+ students19 %>% select(PROMLM_ACTUAL, PROMLM_ANTERIOR, strata_score, COD_SEXO, strata_sexo, CODIGO_REGION_EGRESO, strata_region)
+ sum(is.na(students19$strata_score))
+ sum(is.na(students19$strata_sexo))
+ sum(is.na(students19$strata_region))
+ sum(students19$strata_region == 4)
+```
+
+```{r}
+ students20 %<>% mutate(
+   strata_score = ifelse(pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) < 450 , 1,
+        ifelse(pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) >= 450 & pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) < 600 , 2,
+        ifelse( pmax(PROMLM_ACTUAL, PROMLM_ANTERIOR) >= 600, 3, NA))),
+   strata_sexo = COD_SEXO,
+   strata_region = ifelse(CODIGO_REGION_EGRESO %in% c(1,2,3,4,15), 1,
+   ifelse(CODIGO_REGION_EGRESO %in% c(5,6,7,13), 2,
+   ifelse(CODIGO_REGION_EGRESO %in% c(8,9,10,11,12,14,16), 3, 4))))
+ students20 %>% select(PROMLM_ACTUAL, PROMLM_ANTERIOR, strata_score, COD_SEXO, strata_sexo, CODIGO_REGION_EGRESO, strata_region)
+ sum(is.na(students20$strata_score))
+ sum(is.na(students20$strata_sexo))
+ sum(is.na(students20$strata_region))
+ sum(students20$strata_region == 4)
+```
+
+```{r}
+ students21 %<>% mutate(
+   strata_score = ifelse(pmax(PROM_CM_ACTUAL, PROMLM_ANTERIOR) < 450 , 1,
+        ifelse(pmax(PROM_CM_ACTUAL, PROMLM_ANTERIOR) >= 450 & pmax(PROM_CM_ACTUAL, PROMLM_ANTERIOR) < 600 , 2,
+        ifelse( pmax(PROM_CM_ACTUAL, PROMLM_ANTERIOR) >= 600, 3, NA))),
+   strata_sexo = COD_SEXO,
+   strata_region = ifelse(CODIGO_REGION_EGRESO %in% c(1,2,3,4,15), 1,
+   ifelse(CODIGO_REGION_EGRESO %in% c(5,6,7,13), 2,
+   ifelse(CODIGO_REGION_EGRESO %in% c(8,9,10,11,12,14,16), 3, 4))))
+ students21 %>% select(PROM_CM_ACTUAL, PROMLM_ANTERIOR, strata_score, COD_SEXO, strata_sexo, CODIGO_REGION_EGRESO, strata_region)
+ sum(is.na(students21$strata_score))
+ sum(is.na(students21$strata_sexo))
+ sum(is.na(students21$strata_region))
+ sum(students21$strata_region == 4)
+```
+
+```{r}
+targets_2019 = students19 %>% group_by(strata_score,  strata_region, strata_sexo) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n() )
+  kable(targets_2019, digits=3)
+```
+
+```{r}
+targets_2020 = students20 %>% group_by(strata_score,  strata_region, strata_sexo) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n() )
+kable(targets_2020, digits=3)
+```
+
+```{r}
+targets_2021 = students21 %>% group_by(strata_score,  strata_region, strata_sexo) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n() )
+kable(targets_2021, digits=3)
+```
+
+
+
+# Load information interim for this year
+```{r}
+# students22 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/official/adm2021_archivo_C_demre_2021feb08_MRUN_Compartir.csv", sep=';', header=TRUE)
+# bea <- read.csv('~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/15-01-21_Preseleccionados_BEA_DEMRE_MRUN.csv', sep=';', header=TRUE)
+# inscritos22 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/official/Inscritos_final_febrero_MRUN_Compartir.csv", sep=';', header=TRUE)
+# applications22 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/Reporte_diario_postulaciones_final_mrun.csv", sep=',', header=TRUE)
+# students21_aux = read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/A_INSCRITOS_PUNTAJES_PDT_2021_PUB_MRUN.csv", sep=';', header=TRUE)
+#applications21_aux = read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/C_POSTULANTES_SELECCION_PDT_2021_PUB_MRUN.csv", sep=';', header=TRUE)
+#applications21_aux = read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/Reporte_diario_postulaciones_2_mrun.csv", sep=',', header=TRUE)
+students22     = read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/puntajes_consolidado_v2.csv", sep=',', header=TRUE)
+inscritos22     = read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/inscritos_consolidado_v2.csv", sep=',', header=TRUE)
+applications22 = read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/raw/postulaciones_actual_12_01_22.csv", sep=',', header=TRUE)
+#NOTE: K = 0.67 in the DEMRE files
+nrow(applications22)/K
+# Considering an upper bound of growth in 
+top_growth + nrow(applications21) 
+#Some stats to compare
+#NOTE: THIS NUMBER IS SMALLER THAN 2020 and 2019 BECAUSE WE DON"T HAVE THE recupera puntaje students
+nrow(students22 %>% subset(mate_actual > 0))
+nrow(students21 %>% subset(MATE_ACTUAL > 0))
+nrow(students20 %>% subset(MATE_ACTUAL > 0))
+nrow(students19 %>% subset(MATE_ACTUAL > 0))
+
+```
+
+
+```{r}
+#applications22 %<>% dplyr::rename(mrun = MRUN)
+#students22 %<>% dplyr::rename(mrun = MRUN)
+applications22$applied = 1
+students22 <- merge(students22, applications22[,c("mrun", "applied")], by='mrun', all.x=TRUE)
+```
+
+
+```{r}
+students22$applied[is.na(students22$applied)] <- 0
+#Parssing
+#TODO: CHANGE THE NAME OF THESE VARIABLES ACCORDING TO THE NEW FILES
+#students22 %<>% dplyr::rename(promedio_cm_actual = PROM_CM_ACTUAL, promedio_clec_anterior = PROMLM_ANTERIOR)
+students22 %<>% mutate(promedio_cm_actual = as.numeric(as.character(str_replace_all(promedio_cm_actual, ",", "."))))
+students22 %<>% mutate(promedio_cm_anterior = as.numeric(as.character(str_replace_all(promedio_cm_anterior, ",", "."))))
+#students22$promedio_cm_actual <- as.numeric(as.character(students22$promedio_cm_actual))
+##students22$promedio_cm_anterior <- as.numeric(as.character(students22$promedio_cm_anterior))
+sum(is.na(students22$promedio_cm_actual))
+sum(is.na(students22$promedio_cm_anterior))
+hist(students22$promedio_cm_actual)
+hist(students22$promedio_cm_anterior)
+```
+# Create the same Stratas for interim
+
+```{r}
+ colnames(students22)
+ colnames(inscritos22)
+ #Merge student with inscritos 
+ students22 = merge(students22, inscritos22 %>% select(sexo, mrun), by = "mrun", all.x = TRUE)
+ students22 %<>% mutate(code_sexo = ifelse(sexo == "M", 1, 2))
+ # Compute stratas
+ students22 %<>% mutate(
+   strata_score = ifelse(pmax(promedio_cm_actual, promedio_cm_anterior) < 450 , 1,
+        ifelse(pmax(promedio_cm_actual, promedio_cm_anterior) >= 450 & pmax(promedio_cm_actual, promedio_cm_anterior) < 600 , 2,
+        ifelse( pmax(promedio_cm_actual, promedio_cm_anterior) >= 600, 3, NA))),
+   strata_sexo = code_sexo,
+   strata_region = ifelse(codigo_region %in% c(1,2,3,4,15), 1,
+   ifelse(codigo_region %in% c(5,6,7,13), 2,
+   ifelse(codigo_region %in% c(8,9,10,11,12,14,16), 3, 4))))
+ students22 %>% select(promedio_cm_actual, promedio_cm_anterior, strata_score, code_sexo, strata_sexo, codigo_region, strata_region)
+ sum(is.na(students22$strata_score))
+ sum(is.na(students22$strata_sexo))
+ sum(is.na(students22$strata_region))
+ sum(students22$strata_region == 4)
+```
+
+
+```{r}
+interim_2022 = students22 %>% group_by(strata_score,  strata_region, strata_sexo) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n() )
+interim_2022 %<>% rename(pct_interim = pct)
+kable(interim_2022, digits=3)
+```
+
+# Targets
+
+```{r}
+targets_2019 %<>% select(strata_score, strata_region, strata_sexo, pct) %>% rename(pct_2019 = pct)
+targets_2020 %<>% select(strata_score, strata_region, strata_sexo, pct) %>% rename(pct_2020 = pct)
+targets_2021 %<>% select(strata_score, strata_region, strata_sexo, pct) %>% rename(pct_2021 = pct)
+targets = merge(targets_2019, targets_2020, by = c("strata_score", "strata_region", "strata_sexo"), all = TRUE)
+targets = merge(targets, targets_2021, by = c("strata_score", "strata_region", "strata_sexo"), all = TRUE)
+
+#TODO: modify this line
+targets %<>% mutate(pct_average = pct_2021)
+# targets %<>% mutate(pct_average = (pct_2019 + pct_2020 + pct_2021)/3)
+```
+
+
+```{r}
+#NOTE: NEW ANALYSIS
+apps_tot = nrow(apps_first_21)
+#TODO: MODIFY THIS!
+apps_first_before_21 = apps_first_21 %>% filter(anytime(FECHA_POSTULACION) < "2021-02-12 23:00")
+apps_first_before_21$applied = 1
+apps_partial = nrow(apps_first_before_21)
+#Create stratas 
+apps_first_21$applied = 1
+apps_first_21 = merge(students21 %>% select(!applied), apps_first_21, by.x = "MRUN", by.y = "MRUN", all.x = TRUE)
+apps_first_21 %<>% mutate(applied = ifelse(is.na(applied), 0, applied))
+mean(apps_first_21$applied)
+apps_first_before_21 = merge(students21 %>% select(!applied), apps_first_before_21, by.x = "MRUN", by.y = "MRUN", all.x = TRUE)
+apps_first_before_21$applied
+apps_first_before_21 %<>% mutate(applied = ifelse(is.na(applied), 0, applied))
+mean(apps_first_before_21$applied)
+#Collapse by stratas
+stats_partial_21 = apps_first_before_21 %>% group_by(strata_score,  strata_region, strata_sexo) %>% summarise(n_partial=n(), na_partial=sum(applied), pct_partial=sum(applied)/n() )
+stats_end_21 = apps_first_21 %>% group_by(strata_score,  strata_region, strata_sexo) %>% summarise(n_end=n(), na_end=sum(applied), pct_end=sum(applied)/n() )
+#Merge by stratas and keep na column 
+table_growth_stratas = merge(stats_partial_21, stats_end_21, by = c("strata_score",  "strata_region", "strata_sexo"))
+table_growth_stratas %<>% mutate(growth_rate_strata = na_end/na_partial)
+table_growth_stratas$growth_rate_strata
+View(table_growth_stratas)
+#K = apps_partial/apps_tot
+#K  
+
+#K
+#applications22_projected = merge(applications22, students22, by = "mrun", all.x = TRUE)
+#applications22_projected = applications22_projected[sample(1:nrow(applications22_projected), nrow(applications22_projected)/K, replace=TRUE), ]
+#applications22_projected_stats = applications22_projected %>% group_by(strata_score,  strata_region, strata_sexo) %>% summarise(n=n()) %<>% mutate(share = n/sum(n))
+#targets_interim = students22_projected %>% group_by(strata_score,  strata_region, strata_sexo) %>% summarise(n=n(), na=sum(applied), pct=sum(applied)/n() )
+#targets_interim %<>% rename(pct_target_interim = pct)
+```
+
+
+```{r}
+#NOTE: Notice that here we are using all.x=TRUE because the interim might have less combinations but we cant sample not from interim
+interim_2022 = merge(interim_2022, targets, by = c("strata_score", "strata_region", "strata_sexo"), all.x = TRUE)
+interim_2022 %<>% mutate(N_to_sample = pmax(round(n*pmax(pct_average, pct_interim)), 0))
+#Multiply by factor related to fraction of applications at day X from the total of applicants
+sum(interim_2022$N_to_sample)
+#mult_factor =  sum(interim_2022$na/K)/ sum(interim_2022$N_to_sample)
+#mult_factor = min(mult_factor, 1.1)
+#NEW!
+interim_aux = merge(interim_2022, table_growth_stratas %>% select(strata_score,  strata_region, strata_sexo, growth_rate_strata), by = c("strata_score",  "strata_region", "strata_sexo"))
+interim_aux %<>% mutate(N_to_sample = round(na * growth_rate_strata))
+sum(interim_aux$N_to_sample)
+interim_aux
+View(interim_aux)
+```
+
+```{r}
+sum(interim_aux$N_to_sample)
+```
+
+```{r}
+write.csv(students22[,c("mrun","strata_score", "strata_region", "strata_sexo")], "~/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/students_stratas_to_complete_market.csv",  row.names = FALSE)
+write.csv(interim_aux[,c("strata_score", "strata_region", "strata_sexo", "N_to_sample")], "~/Dropbox/Mistakes/Code/Python/Cartillas/data/2022/N_to_sample_stratas_to_complete_market.csv",  row.names = FALSE)
+```
+
+
+
+# OUTPUTS:
+- Number of cases to complete by strata (region, gender, level mat-verbal)
+- Clasification of students according to stratas (to know what students to sample)
+    - MRUN
+    - Strata (region, gender, level)

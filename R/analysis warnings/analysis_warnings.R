@@ -6,7 +6,7 @@ rm(list = ls())
 
 library(plyr)
 library(dplyr)
-library(tidyr) 
+library(tidyr)
 library(magrittr)
 library(parallel)
 library(lubridate)
@@ -42,7 +42,7 @@ table(appList$Treatment)
 sum(duplicated(appList$mrun))
 # TODO: add description of file
 appRCT <- read.csv('~/Dropbox/Mistakes Structural/Data/2021/appRCT.csv', sep=',', header=TRUE)
-# NOTE: we do not have T3 anymore in this file 
+# NOTE: we do not have T3 anymore in this file
 table(appRCT$Treatment)
 sum(duplicated(appRCT$mrun))
 
@@ -73,7 +73,7 @@ save(bcu,file = "~/Dropbox/Mistakes Structural/Data/2021/ACCESO_BCU-8184.ETAPA2.
 # Merging survey 2021 -----------------------------------------------------
 
 dfs_2021 = read.csv2("~/Dropbox/Mistakes Structural/Data/2021/survey files/survey-responses-2021.csv", sep = ",")
-apps_input_survey_2021 = read.csv2("~/Dropbox/Mistakes Structural/Data/2021/survey files/postulaciones_edited.csv", sep = ",") 
+apps_input_survey_2021 = read.csv2("~/Dropbox/Mistakes Structural/Data/2021/survey files/postulaciones_edited.csv", sep = ",")
 dfs_2021 = merge(dfs_2021, apps_input_survey_2021, by.x = "id", by.y = "ID", all.x = TRUE)
 # Merging (INEXACT) by application lists an application scores
 # Create fake ID for appFinal
@@ -138,7 +138,7 @@ appFinal$fake_app_id = sapply(1:nrow(appFinal), FUN = Fake_app_id_fun, appFinal 
 # Date
 # Analyze distribution of applications per time of the day and day
 #TODO: Check the timezone of the output of Chris!
-#TODO: use regular expression for this to be more pro 
+#TODO: use regular expression for this to be more pro
 appFinal %<>% mutate(fecha_modified = gsub(" 9\\:"," 09:",FECHA_POSTULACION))
 appFinal %<>% mutate(fecha_modified = gsub(" 8\\:"," 08:",fecha_modified))
 appFinal %<>% mutate(fecha_modified = gsub(" 7\\:"," 07:",fecha_modified))
@@ -152,7 +152,7 @@ appFinal %<>% mutate(fecha_modified = gsub(" 0\\:"," 00:",fecha_modified))
 appFinal %<>% mutate(fecha_modified = anytime(fecha_modified))
 hist(as.Date(appFinal$FECHA_POSTULACION, tryFormats = c("%Y-%m-%d %H:%M")), breaks = "days")
 ggplot(appFinal, aes(fecha_modified)) +
-  geom_histogram(bins = 100) + 
+  geom_histogram(bins = 100) +
   geom_vline(xintercept = anytime("2021-02-13 23:00")) +
   geom_vline(xintercept = anytime("2021-02-14 11:49"))
 #TODO: check that these times are in Chilean time
@@ -173,7 +173,7 @@ p = ggplot(appFinal %>% mutate(application_initial = ifelse(NRO_POSTULACION == 1
                     labels = c("Initial",
                                "Modified")) +
   theme_bw() +
-  theme(panel.grid.major = element_blank(), 
+  theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.background = element_blank())
 p
@@ -182,7 +182,7 @@ ggsave(p, file = paste(path_draft_plots,"Histogram_all_applications.png",sep="")
 #Separate Date
 appFinal <- separate(data = appFinal, col = FECHA_POSTULACION, into=c("FECHA", "HORA"), sep=" ")
 
-# Stats 
+# Stats
 sum(duplicated(appFinal$MRUN))
 
 # App length
@@ -203,11 +203,13 @@ ggplot(appFinal, aes( x = as.factor(app_length))) + geom_bar()
 #NOTE: the sample that recieved an email are all students that submitted an application before "2021-02-13 23:00"
 # Chile time zone
 
+#TODO: Nacho will load the original application file we used as an input whjich must be before the cartillas. He will then compare those applications with this
+#TODO: filter from below.
 # Applications before cartilla
-appFinal_before_cartilla = appFinal %>% 
+appFinal_before_cartilla = appFinal %>%
   subset((FECHA < "2021-02-13") | (FECHA == "2021-02-13" & (strptime(HORA, "%H:%M") < strptime("23:00", "%H:%M"))))
 # Select the last application by student
-appFinal_before_cartilla_summary = appFinal_before_cartilla %>% 
+appFinal_before_cartilla_summary = appFinal_before_cartilla %>%
   group_by(MRUN) %>% summarise(max_app_nro = max(NRO_POSTULACION))
 # Merge stat
 appFinal_before_cartilla = merge(appFinal_before_cartilla,
@@ -222,10 +224,12 @@ mean(appFinal_before_cartilla$app_length)
 
 # Applications after cartilla
 #TODO: check if we are adding applications before sending the email
-appFinal_after_cartilla = appFinal %>% 
+#TODO: Nacho will load the oficial application file here. He will then compare those applications with this
+#TODO: filter from below.
+appFinal_after_cartilla = appFinal %>%
   subset((FECHA > "2021-02-13") | (FECHA == "2021-02-13" & (strptime(HORA, "%H:%M") >= strptime("23:00", "%H:%M"))))
 # Select the last application by student
-appFinal_after_cartilla_summary = appFinal_after_cartilla %>% 
+appFinal_after_cartilla_summary = appFinal_after_cartilla %>%
   group_by(MRUN) %>% summarise(max_app_nro = max(NRO_POSTULACION))
 # Merge stat
 appFinal_after_cartilla = merge(appFinal_after_cartilla,
@@ -270,7 +274,7 @@ sum(duplicated(dfs_2021$fake_app_id))
 #Drop duplicated IDs
 dup_ids_dfs_2021 = dfs_2021[duplicated(dfs_2021$fake_app_id), "fake_app_id"]
 dfs_2021 = dfs_2021[!(dfs_2021$fake_app_id %in% dup_ids_dfs_2021),]
-dup_ids_appFinal_before_after = appFinal_before_after[duplicated(appFinal_before_after$fake_app_id_final), 
+dup_ids_appFinal_before_after = appFinal_before_after[duplicated(appFinal_before_after$fake_app_id_final),
                                                       "fake_app_id_final"]
 appFinal_before_after_survey = appFinal_before_after[!(appFinal_before_after$fake_app_id_final %in% dup_ids_appFinal_before_after),]
 
@@ -304,17 +308,16 @@ hist(bcu_earnings$mid_wage)
 # Use our computed cutoffs
 df_cutoffs = readRDS("~/Dropbox/Mistakes Structural/Data/older/panel_cutoffs_2004_2020_20210420.rds")
 # Merge with bcu
-bcu = merge(bcu, df_cutoffs %>% select(codigo_carrera, cutoff_2020), 
-            by.x = "CODIGO_DEMRE", by.y = "codigo_carrera", all.x = TRUE)  
+bcu = merge(bcu, df_cutoffs %>% select(codigo_carrera, cutoff_2020),
+            by.x = "CODIGO_DEMRE", by.y = "codigo_carrera", all.x = TRUE)
 hist(bcu$cutoff_2020)
-# NOTE: 340 programs for which we do not have a cutoff value 
+# NOTE: 340 programs for which we do not have a cutoff value
 sum(is.na(bcu$cutoff_2020))
 
 # Added programs ----------------------------------------------------------
 
 
-#TODO: review this code and make it more efficient 
-
+#TODO: review this code and make it more efficient
 
 #Obtain set of programs that the student adds
 appFinal_before_after$mean_wage_before = apply(appFinal_before_after, MARGIN = 1, FUN = function(x){
@@ -326,13 +329,13 @@ appFinal_before_after$mean_wage_before = apply(appFinal_before_after, MARGIN = 1
   }
   #if(x["changed_app_after"] == 0){
   #  cars_after_set = cars_before_set
-  #} 
+  #}
   #cars_new = setdiff(as.numeric(cars_after_set), as.numeric(cars_before_set))
   # Filter NAs and -1
   #cars_new = cars_new[!is.na(cars_new)]
   #cars_new = cars_new[cars_new != -1]
   # Compute average wage of new programs
-  mean_wage_before_cars = mean((bcu_earnings %>% subset(CODIGO_DEMRE %in% cars_before_set))$mid_wage, na.rm = TRUE) 
+  mean_wage_before_cars = mean((bcu_earnings %>% subset(CODIGO_DEMRE %in% cars_before_set))$mid_wage, na.rm = TRUE)
   return(mean_wage_before_cars)
 })
 hist(appFinal_before_after$mean_wage_before)#Obtain set of programs that the student adds
@@ -347,13 +350,13 @@ appFinal_before_after$mean_wage_after = apply(appFinal_before_after, MARGIN = 1,
   }
   if(x["changed_app_after"] == 0){
     cars_after_set = cars_before_set
-  } 
+  }
   #cars_new = setdiff(as.numeric(cars_after_set), as.numeric(cars_before_set))
   # Filter NAs and -1
   #cars_new = cars_new[!is.na(cars_new)]
   #cars_new = cars_new[cars_new != -1]
   # Compute average wage of new programs
-  mean_wage_after_cars = mean((bcu_earnings %>% subset(CODIGO_DEMRE %in% cars_after_set))$mid_wage, na.rm = TRUE) 
+  mean_wage_after_cars = mean((bcu_earnings %>% subset(CODIGO_DEMRE %in% cars_after_set))$mid_wage, na.rm = TRUE)
   return(mean_wage_after_cars)
 })
 hist(appFinal_before_after$mean_wage_after)
@@ -369,13 +372,13 @@ appFinal_before_after$mean_wage_new_cars = apply(appFinal_before_after, MARGIN =
   }
   if(x["changed_app_after"] == 0){
     cars_after_set = cars_before_set
-  } 
+  }
   cars_new = setdiff(as.numeric(cars_after_set), as.numeric(cars_before_set))
   # Filter NAs and -1
   cars_new = cars_new[!is.na(cars_new)]
   cars_new = cars_new[cars_new != -1]
   # Compute average wage of new programs
-  mean_wage_new_cars = mean((bcu_earnings %>% subset(CODIGO_DEMRE %in% cars_new))$mid_wage, na.rm = TRUE) 
+  mean_wage_new_cars = mean((bcu_earnings %>% subset(CODIGO_DEMRE %in% cars_new))$mid_wage, na.rm = TRUE)
   return(mean_wage_new_cars)
 })
 hist(appFinal_before_after$mean_wage_new_cars)
@@ -391,14 +394,14 @@ appFinal_before_after$mean_wage_new_cars_change = apply(appFinal_before_after, M
   }
   if(x["changed_app_after"] == 0){
     cars_after_set = cars_before_set
-  } 
+  }
   cars_new = setdiff(as.numeric(cars_after_set), as.numeric(cars_before_set))
   # Filter NAs and -1
   cars_new = cars_new[!is.na(cars_new)]
   cars_new = cars_new[cars_new != -1]
   # Compute average wage of new programs
   if(length(cars_new) > 0){
-  mean_wage_new_cars = mean((bcu_earnings %>% subset(CODIGO_DEMRE %in% cars_new))$mid_wage, na.rm = TRUE) 
+  mean_wage_new_cars = mean((bcu_earnings %>% subset(CODIGO_DEMRE %in% cars_new))$mid_wage, na.rm = TRUE)
   mean_wage_before_cars = mean((bcu_earnings %>% subset(CODIGO_DEMRE %in% cars_before_set))$mid_wage, na.rm = TRUE)
   mean_wage_new_cars_change = mean_wage_new_cars - mean_wage_before_cars
   }
@@ -421,13 +424,13 @@ appFinal_before_after$mean_cutoff_before = apply(appFinal_before_after, MARGIN =
   }
   #if(x["changed_app_after"] == 0){
   #  cars_after_set = cars_before_set
-  #} 
+  #}
   #cars_new = setdiff(as.numeric(cars_after_set), as.numeric(cars_before_set))
   # Filter NAs and -1
   #cars_new = cars_new[!is.na(cars_new)]
   #cars_new = cars_new[cars_new != -1]
   # Compute average wage of new programs
-  mean_cutoff_before_cars = mean((bcu %>% subset(CODIGO_DEMRE %in% cars_before_set))$cutoff_2020, na.rm = TRUE) 
+  mean_cutoff_before_cars = mean((bcu %>% subset(CODIGO_DEMRE %in% cars_before_set))$cutoff_2020, na.rm = TRUE)
   return(mean_cutoff_before_cars)
 })
 hist(appFinal_before_after$mean_cutoff_before)#Obtain set of programs that the student adds
@@ -441,13 +444,13 @@ appFinal_before_after$mean_cutoff_after = apply(appFinal_before_after, MARGIN = 
   }
   if(x["changed_app_after"] == 0){
     cars_after_set = cars_before_set
-  } 
+  }
   #cars_new = setdiff(as.numeric(cars_after_set), as.numeric(cars_before_set))
   # Filter NAs and -1
   #cars_new = cars_new[!is.na(cars_new)]
   #cars_new = cars_new[cars_new != -1]
   # Compute average wage of new programs
-  mean_cutoff_after_cars = mean((bcu %>% subset(CODIGO_DEMRE %in% cars_after_set))$cutoff_2020, na.rm = TRUE) 
+  mean_cutoff_after_cars = mean((bcu %>% subset(CODIGO_DEMRE %in% cars_after_set))$cutoff_2020, na.rm = TRUE)
   return(mean_cutoff_after_cars)
 })
 hist(appFinal_before_after$mean_cutoff_after)
@@ -462,13 +465,13 @@ appFinal_before_after$mean_cutoff_new_cars = apply(appFinal_before_after, MARGIN
   }
   if(x["changed_app_after"] == 0){
     cars_after_set = cars_before_set
-  } 
+  }
   cars_new = setdiff(as.numeric(cars_after_set), as.numeric(cars_before_set))
   # Filter NAs and -1
   cars_new = cars_new[!is.na(cars_new)]
   cars_new = cars_new[cars_new != -1]
   # Compute average wage of new programs
-  mean_cutoff_new_cars = mean((bcu %>% subset(CODIGO_DEMRE %in% cars_new))$cutoff_2020, na.rm = TRUE) 
+  mean_cutoff_new_cars = mean((bcu %>% subset(CODIGO_DEMRE %in% cars_new))$cutoff_2020, na.rm = TRUE)
   return(mean_cutoff_new_cars)
 })
 hist(appFinal_before_after$mean_cutoff_new_cars)
@@ -498,7 +501,7 @@ appFinal_before_after$invalid_programs_after = apply(appFinal_before_after, MARG
   }
   if(x["changed_app_after"] == 0){
     cars_after_set = cars_before_set
-  } 
+  }
   invalid_programs_after = sum(as.numeric(cars_after_set[!is.na(cars_after_set)]) == -1)
   #invalid_programs_before = sum(as.numeric(cars_before_set[!is.na(cars_before_set)]) == -1)
   return(invalid_programs_after)
@@ -516,7 +519,7 @@ appFinal_before_after$invalid_programs_change = apply(appFinal_before_after, MAR
   }
   if(x["changed_app_after"] == 0){
     cars_after_set = cars_before_set
-  } 
+  }
   invalid_programs_after = sum(as.numeric(cars_after_set[!is.na(cars_after_set)]) == -1)
   invalid_programs_before = sum(as.numeric(cars_before_set[!is.na(cars_before_set)]) == -1)
   return(invalid_programs_after-invalid_programs_before)
@@ -534,7 +537,7 @@ appFinal_before_after$invalid_programs_share_change = apply(appFinal_before_afte
   }
   if(x["changed_app_after"] == 0){
     cars_after_set = cars_before_set
-  } 
+  }
   invalid_programs_share_after = sum(as.numeric(cars_after_set[!is.na(cars_after_set)]) == -1)/as.numeric(x["app_length_after"])
   invalid_programs_share_before = sum(as.numeric(cars_before_set[!is.na(cars_before_set)]) == -1)/as.numeric(x["app_length_before"])
   return(invalid_programs_share_after-invalid_programs_share_before)
@@ -593,23 +596,23 @@ appFinal_before_after = merge(appFinal_before_after, appRCT %>% select(!Treatmen
                               by.x = "MRUN", by.y = "mrun", all.x = TRUE)
 
 # Check changes in applications by Treatment
-table_with_strata2 = appFinal_before_after %>% 
-  group_by(Treatment, Strata_2, abrio_cartilla) %>% 
+table_with_strata2 = appFinal_before_after %>%
+  group_by(Treatment, Strata_2, abrio_cartilla) %>%
   summarise(n = n(),
             changed_app_after_n = sum(changed_app_after > 0),
             changed_app_after_mean = mean(changed_app_after))
 
 # Excluding T3
-appFinal_before_after %>% 
+appFinal_before_after %>%
   filter(Treatment != 3) %>%
-  group_by(abrio_cartilla) %>% 
+  group_by(abrio_cartilla) %>%
   summarise(n = n(),
             changed_app_after_n = sum(changed_app_after > 0),
             changed_app_after_mean = mean(changed_app_after))
 
 # Check some stats for students with an admissibility mistake by opening of cartilla or not
-appFinal_before_after %>% filter((Treatment != 3) & (invalid_programs_before > 0)) %>% 
-  group_by(abrio_cartilla) %>% 
+appFinal_before_after %>% filter((Treatment != 3) & (invalid_programs_before > 0)) %>%
+  group_by(abrio_cartilla) %>%
   summarise(n = n(),
             changed_app_after_n = sum(changed_app_after > 0),
             changed_app_after_mean = mean(changed_app_after),
@@ -619,8 +622,8 @@ appFinal_before_after %>% filter((Treatment != 3) & (invalid_programs_before > 0
             invalid_programs_share_reduced_mean = mean(invalid_programs_share_change < 0))
 
 # Check some stats for students with an admissibility mistake by treatment group
-appFinal_before_after %>% filter((invalid_programs_before > 0)) %>% 
-  group_by(Treatment, abrio_cartilla) %>% 
+appFinal_before_after %>% filter((invalid_programs_before > 0)) %>%
+  group_by(Treatment, abrio_cartilla) %>%
   summarise(n = n(),
             changed_app_after_n = sum(changed_app_after > 0),
             changed_app_after_mean = mean(changed_app_after),
@@ -743,10 +746,10 @@ appFinal_before_after %<>% mutate(propensity_score_sample_anais = ifelse(is.na(p
 table(appFinal_before_after$propensity_score_sample_anais)
 
 # Stats for students with an admissibility mistake by treatment group
-table_treatment_stats_adm_mistakes = appFinal_before_after %>% 
-  filter((invalid_programs_before > 0)) %>% 
+table_treatment_stats_adm_mistakes = appFinal_before_after %>%
+  filter((invalid_programs_before > 0)) %>%
   subset(propensity_score_sample == 1) %>%
-  group_by(Treatment_label, abrio_cartilla_label) %>% 
+  group_by(Treatment_label, abrio_cartilla_label) %>%
   summarise(n = n(),
             #changed_app_after_n = sum(changed_app_after > 0),
             changed_app_after_mean = round(100*mean(changed_app_after),2),
@@ -755,10 +758,10 @@ table_treatment_stats_adm_mistakes = appFinal_before_after %>%
             #change_add_mistakes_mean = mean(invalid_programs_change),
             invalid_programs_share_reduced_mean = round(100*mean(invalid_programs_share_change < 0),2))
 
-table_treatment_stats_adm_mistakes_stderr = appFinal_before_after %>% 
+table_treatment_stats_adm_mistakes_stderr = appFinal_before_after %>%
   filter((invalid_programs_before > 0)) %>%
   subset(propensity_score_sample == 1) %>%
-  group_by(Treatment_label, abrio_cartilla_label) %>% 
+  group_by(Treatment_label, abrio_cartilla_label) %>%
   summarise(n = "-",
             #changed_app_after_n = "-",
             changed_app_after_mean = round(100*sd(changed_app_after)/sqrt(n()),2),
@@ -831,7 +834,7 @@ close(table_latex_file)
 
 
 # Number of applicants who modified their appplication by treatement group
-table_treatment_stats = appFinal_before_after %>% 
+table_treatment_stats = appFinal_before_after %>%
   group_by(Treatment_label) %>%
   summarise(Total =    length(changed_app_after),
             Opens = round(100*mean(abrio_cartilla),2),
@@ -846,7 +849,7 @@ table_treatment_stats = appFinal_before_after %>%
             #Wage_change = round(mean(mid_wage_change[program_asig_change], na.rm = TRUE),2),
             )
 
-table_treatment_stats_stderr = appFinal_before_after %>% 
+table_treatment_stats_stderr = appFinal_before_after %>%
   group_by(Treatment_label) %>%
   summarise(Total =    "-",
             Opens = round(100*sd(abrio_cartilla)/sqrt(n()),2),
@@ -927,7 +930,7 @@ close(table_latex_file)
 
 # Consider only students who opened the cartilla
 # Number of applicants who modified their appplication by treatement group
-table_treatment_abrio_stats = appFinal_before_after %>% 
+table_treatment_abrio_stats = appFinal_before_after %>%
   subset(propensity_score_sample == 1) %>%
   group_by(Treatment_label, abrio_cartilla_label) %>%
   summarise(Total =    length(changed_app_after),
@@ -943,7 +946,7 @@ table_treatment_abrio_stats = appFinal_before_after %>%
             #Wage_change = round(mean(mid_wage_change[program_asig_change], na.rm = TRUE),2),
   )
 
-table_treatment_abrio_stats_stderr = appFinal_before_after %>% 
+table_treatment_abrio_stats_stderr = appFinal_before_after %>%
   subset(propensity_score_sample == 1) %>%
   group_by(Treatment_label, abrio_cartilla_label) %>%
   summarise(Total =    "-",
@@ -1066,7 +1069,7 @@ sum(appFinal_before_after$PUNTAJE_CARR1.x == -1)
 
 # Consider only students who opened the cartilla
 # Number of applicants who modified their appplication by treatement group and strata
-table_treatment_strata_stats = appFinal_before_after %>% 
+table_treatment_strata_stats = appFinal_before_after %>%
   #subset(abrio_cartilla == 1) %>%
   subset(propensity_score_sample == 1) %>%
   subset(Strata_2_label != "Safety and Reach") %>%
@@ -1086,11 +1089,11 @@ table_treatment_strata_stats = appFinal_before_after %>%
             #Wage_change = round(mean(mid_wage_change[program_asig_change], na.rm = TRUE),2),
   )
 
-table_treatment_strata_stats_stderr = appFinal_before_after %>% 
+table_treatment_strata_stats_stderr = appFinal_before_after %>%
   #subset(abrio_cartilla == 1) %>%
   subset(propensity_score_sample == 1) %>%
   subset(Strata_2_label != "Safety and Reach") %>%
-  filter(Treatment != 3) %>% 
+  filter(Treatment != 3) %>%
   arrange(Treatment_label) %>%
   group_by(Strata_2_label, Treatment_label, abrio_cartilla_label) %>%
   summarise(Total =    "-",
@@ -1396,7 +1399,7 @@ hist(app_UBO_before_after$n_apps_ubo_change)
 
     #Number of new programs introduced in the final ROL:
 appFinal_before_after$nber_progr_added = apply(appFinal_before_after, MARGIN = 1, FUN = function(x){
-  
+
   cars_before_set = c()
   cars_after_set = c()
   for(k in c("1","2","3","4","5","6","7","8","9","10")){
@@ -1405,14 +1408,14 @@ appFinal_before_after$nber_progr_added = apply(appFinal_before_after, MARGIN = 1
   }
   if(x["changed_app_after"] == 0){
     cars_after_set = cars_before_set
-  } 
-  
+  }
+
   cars_new = setdiff(as.numeric(cars_after_set), as.numeric(cars_before_set))
-  
+
   # Filter NAs and -1
   cars_new = cars_new[!is.na(cars_new)]
   cars_new = cars_new[cars_new != -1]
-  
+
   #Nber of new programs:
   cars_new_length = length(cars_new)
   return(cars_new_length)
@@ -1429,12 +1432,12 @@ appFinal_before_after$nber_progr_removed = apply(appFinal_before_after, MARGIN =
   }
   if(x["changed_app_after"] == 0){
     cars_after_set = cars_before_set
-  } 
+  }
   cars_removed = setdiff(as.numeric(cars_before_set), as.numeric(cars_after_set))
   # Filter NAs and -1
   cars_removed = cars_removed[!is.na(cars_removed)]
   cars_removed = cars_removed[cars_removed != -1]
-  
+
   #Nber of removed programs:
   cars_removed_length = length(cars_removed)
   return(cars_removed_length)
@@ -1443,7 +1446,7 @@ appFinal_before_after$nber_progr_removed = apply(appFinal_before_after, MARGIN =
 
     #Share of valid programs among programs added to the final ROL:
 appFinal_before_after$share_valid_added_progr = apply(appFinal_before_after, MARGIN = 1, FUN = function(x){
-  
+
   cars_before_set = c()
   cars_after_set = c()
   for(k in c("1","2","3","4","5","6","7","8","9","10")){
@@ -1452,27 +1455,27 @@ appFinal_before_after$share_valid_added_progr = apply(appFinal_before_after, MAR
   }
   if(x["changed_app_after"] == 0){
     cars_after_set = cars_before_set
-  } 
+  }
   cars_new = setdiff(as.numeric(cars_after_set), as.numeric(cars_before_set))
   # Filter NAs and -1
   cars_new = cars_new[!is.na(cars_new)]
   cars_new = cars_new[cars_new != -1]
   #Nber of new programs:
   cars_new_length = length(cars_new)
-  
-  
+
+
   #Validity of new programs
-  
+
   cars_after_score = c()
   for(j in cars_new){
     for(k in c("1","2","3","4","5","6","7","8","9","10")){
       cars_after_score = c(cars_after_score,ifelse(x[paste("CAR_CODIGO_",k,"PREFER.y", sep = "")]==j, x[paste("PUNTAJE_CARR",k,".y", sep = "")], NA))
     }
-  } 
-  
+  }
+
   # Filter NAs
   cars_after_score = cars_after_score[!is.na(cars_after_score)]
-  
+
   #Share of valid added programs
   invalid_programs_after = sum(as.numeric(cars_after_score) != -1)
   share_valid_added_progr = ifelse(cars_new_length!=0, invalid_programs_after/cars_new_length, NA)
@@ -1530,16 +1533,16 @@ table(appFinal_before_after %>% subset(pace=="PACE") %>% select(Treatment), useN
 table(appFinal_before_after %>% subset(pace=="PACE" & promedio_cm_actual<450 & promedio_lm_anterior<450) %>% select(Treatment), useNA = "always")
 
     #Replace weigthed scores with those of initial ROL if the student did not modify it:
-appFinal_before_after %<>% mutate(PUNTAJE_CARR1.y = ifelse(changed_app_after==0,PUNTAJE_CARR1.x, PUNTAJE_CARR1.y ) ) 
-appFinal_before_after %<>% mutate(PUNTAJE_CARR2.y = ifelse(changed_app_after==0,PUNTAJE_CARR2.x, PUNTAJE_CARR2.y ) ) 
-appFinal_before_after %<>% mutate(PUNTAJE_CARR3.y = ifelse(changed_app_after==0,PUNTAJE_CARR3.x, PUNTAJE_CARR3.y ) ) 
-appFinal_before_after %<>% mutate(PUNTAJE_CARR4.y = ifelse(changed_app_after==0,PUNTAJE_CARR4.x, PUNTAJE_CARR4.y ) ) 
-appFinal_before_after %<>% mutate(PUNTAJE_CARR5.y = ifelse(changed_app_after==0,PUNTAJE_CARR5.x, PUNTAJE_CARR5.y ) ) 
-appFinal_before_after %<>% mutate(PUNTAJE_CARR6.y = ifelse(changed_app_after==0,PUNTAJE_CARR6.x, PUNTAJE_CARR6.y ) ) 
-appFinal_before_after %<>% mutate(PUNTAJE_CARR7.y = ifelse(changed_app_after==0,PUNTAJE_CARR7.x, PUNTAJE_CARR7.y ) ) 
-appFinal_before_after %<>% mutate(PUNTAJE_CARR8.y = ifelse(changed_app_after==0,PUNTAJE_CARR8.x, PUNTAJE_CARR8.y ) ) 
-appFinal_before_after %<>% mutate(PUNTAJE_CARR9.y = ifelse(changed_app_after==0,PUNTAJE_CARR9.x, PUNTAJE_CARR9.y ) ) 
-appFinal_before_after %<>% mutate(PUNTAJE_CARR10.y = ifelse(changed_app_after==0,PUNTAJE_CARR10.x, PUNTAJE_CARR10.y ) ) 
+appFinal_before_after %<>% mutate(PUNTAJE_CARR1.y = ifelse(changed_app_after==0,PUNTAJE_CARR1.x, PUNTAJE_CARR1.y ) )
+appFinal_before_after %<>% mutate(PUNTAJE_CARR2.y = ifelse(changed_app_after==0,PUNTAJE_CARR2.x, PUNTAJE_CARR2.y ) )
+appFinal_before_after %<>% mutate(PUNTAJE_CARR3.y = ifelse(changed_app_after==0,PUNTAJE_CARR3.x, PUNTAJE_CARR3.y ) )
+appFinal_before_after %<>% mutate(PUNTAJE_CARR4.y = ifelse(changed_app_after==0,PUNTAJE_CARR4.x, PUNTAJE_CARR4.y ) )
+appFinal_before_after %<>% mutate(PUNTAJE_CARR5.y = ifelse(changed_app_after==0,PUNTAJE_CARR5.x, PUNTAJE_CARR5.y ) )
+appFinal_before_after %<>% mutate(PUNTAJE_CARR6.y = ifelse(changed_app_after==0,PUNTAJE_CARR6.x, PUNTAJE_CARR6.y ) )
+appFinal_before_after %<>% mutate(PUNTAJE_CARR7.y = ifelse(changed_app_after==0,PUNTAJE_CARR7.x, PUNTAJE_CARR7.y ) )
+appFinal_before_after %<>% mutate(PUNTAJE_CARR8.y = ifelse(changed_app_after==0,PUNTAJE_CARR8.x, PUNTAJE_CARR8.y ) )
+appFinal_before_after %<>% mutate(PUNTAJE_CARR9.y = ifelse(changed_app_after==0,PUNTAJE_CARR9.x, PUNTAJE_CARR9.y ) )
+appFinal_before_after %<>% mutate(PUNTAJE_CARR10.y = ifelse(changed_app_after==0,PUNTAJE_CARR10.x, PUNTAJE_CARR10.y ) )
 
 
     #Replace missing weighted scores (NA) with zeros:
@@ -1568,8 +1571,8 @@ appFinal_before_after %<>% mutate(error_after = ifelse(((PUNTAJE_CARR1.y == -1) 
                                                           (PUNTAJE_CARR10.y == -1)), 1, 0))
 
 table(appFinal_before_after$error_before)
-table(appFinal_before_after[appFinal_before_after$error_before==1,]$error_after)   
-table(appFinal_before_after[appFinal_before_after$changed_app_after==1 & appFinal_before_after$error_before==1,]$error_after)   
+table(appFinal_before_after[appFinal_before_after$error_before==1,]$error_after)
+table(appFinal_before_after[appFinal_before_after$changed_app_after==1 & appFinal_before_after$error_before==1,]$error_after)
 
 
 
@@ -1640,7 +1643,7 @@ View(appFinal_before_after[appFinal_before_after$T3_test4==1,])
 
 
 
-#Balance Test 1 vs T0-2:                                                  
+#Balance Test 1 vs T0-2:
 balance1_T3_test1 <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test1==1), formula = promedio_cm_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance1_T3_test1)
 balance2_T3_test1 <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test1==1), formula = cien_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
@@ -1654,7 +1657,7 @@ summary(balance5_T3_test1)
 balance6_T3_test1 <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test1==1) & (CAR_CODIGO_2PREFER.x!=-1 & PUNTAJE_CARR2.x!=-1)), formula = PUNTAJE_CARR2.x ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance6_T3_test1)
 
-#Balance Test 1 vs T0-2 + sample restricted to those with at least an application mistake in their initial ROL:                                                  
+#Balance Test 1 vs T0-2 + sample restricted to those with at least an application mistake in their initial ROL:
 balance1_T3_test1_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test1==1) & error_before==1), formula = promedio_cm_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance1_T3_test1_error)
 balance2_T3_test1_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test1==1)  & error_before==1), formula = cien_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
@@ -1662,14 +1665,14 @@ summary(balance2_T3_test1_error)
 balance3_T3_test1_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test1==1) & error_before==1), formula = hcso_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance3_T3_test1_error)
 balance4_T3_test1_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test1==1)  & error_before==1), formula = mean_cutoff_before ~ Treatment_0 + Treatment_1 + Treatment_2)
-summary(balance4_T3_test1_error) 
+summary(balance4_T3_test1_error)
 balance5_T3_test1_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test1==1)  & error_before==1), formula = mean_wage_before ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance5_T3_test1_error)
 balance6_T3_test1_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test1==1)  & error_before==1 & (CAR_CODIGO_2PREFER.x!=-1 & PUNTAJE_CARR2.x!=-1)), formula = PUNTAJE_CARR2.x ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance6_T3_test1_error)
 
 
-#Balance Test 2 vs T0-2::                                                  
+#Balance Test 2 vs T0-2::
 balance1_T3_test2 <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1), formula = promedio_cm_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance1_T3_test2)
 balance2_T3_test2 <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1), formula = cien_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
@@ -1685,7 +1688,7 @@ summary(balance6_T3_test2)
 
 
 
-#Balance Test 2 vs T0-2 + sample restricted to those with at least an application mistake in their initial ROL:                                                 
+#Balance Test 2 vs T0-2 + sample restricted to those with at least an application mistake in their initial ROL:
 balance1_T3_test2_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = promedio_cm_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance1_T3_test2_error)
 balance2_T3_test2_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1)  & error_before==1), formula = cien_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
@@ -1693,7 +1696,7 @@ summary(balance2_T3_test2_error)
 balance3_T3_test2_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1) & error_before==1), formula = hcso_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance3_T3_test2_error)
 balance4_T3_test2_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1)  & error_before==1), formula = mean_cutoff_before ~ Treatment_0 + Treatment_1 + Treatment_2)
-summary(balance4_T3_test2_error) 
+summary(balance4_T3_test2_error)
 balance5_T3_test2_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1)  & error_before==1), formula = mean_wage_before ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance5_T3_test2_error)
 balance6_T3_test2_error <- lm(data = appFinal_before_after %>% subset((Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test2==1)  & error_before==1 & (CAR_CODIGO_2PREFER.x!=-1 & PUNTAJE_CARR2.x!=-1)), formula = PUNTAJE_CARR2.x ~ Treatment_0 + Treatment_1 + Treatment_2)
@@ -1701,7 +1704,7 @@ summary(balance6_T3_test2_error)
 
 
 
-#Balance Test 3 vs T0-2:                                                  
+#Balance Test 3 vs T0-2:
 balance1_T3_test3 <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test3==1), formula = promedio_cm_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance1_T3_test3)
 balance2_T3_test3 <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test3==1), formula = cien_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
@@ -1715,7 +1718,7 @@ summary(balance5_T3_test3)
 balance6_T3_test3 <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test3==1), formula = PUNTAJE_CARR1.x ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance6_T3_test3)
 
-#Balance Test 4 vs T0-2:                                                  
+#Balance Test 4 vs T0-2:
 balance1_T3_test4 <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test4==1), formula = promedio_cm_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
 summary(balance1_T3_test4)
 balance2_T3_test4 <- lm(data = appFinal_before_after %>% subset(Treatment_0==1 | Treatment_1==1 | Treatment_2==1 | T3_test4==1), formula = cien_actual ~ Treatment_0 + Treatment_1 + Treatment_2)
@@ -1900,7 +1903,7 @@ risk = merge(risk_final, risk_initial, by="MRUN", all.x = TRUE)
 remove(risk_initial, risk_final)
 
     #Merge to main dataset
-appFinal_before_after = merge(appFinal_before_after, risk, by="MRUN", all.x=TRUE)  
+appFinal_before_after = merge(appFinal_before_after, risk, by="MRUN", all.x=TRUE)
 
     #Compute the risk and the change in risk
 appFinal_before_after %<>% mutate(risk_initial = 1-overall_prob_initial)
@@ -1910,6 +1913,7 @@ appFinal_before_after %<>% mutate(reduced_risk = ifelse(change_risk<0, 1, 0))
 appFinal_before_after %<>% mutate(increased_risk = ifelse(change_risk>0, 1, 0))
 
     #check the initial risk corresponds to strata definition
+# TODO: these are the tables that Anais is having issues with!
 table(appFinal_before_after %>% subset(risk_initial>=0.70) %>% select(Strata_2_label), useNA="always")                      #We have 9476 students in the Safety strata, 29 in Explore
 table(appFinal_before_after %>% subset(risk_initial>=0.30 & risk_initial<0.70) %>% select(Strata_2_label), useNA="always")  #Pb: 563 students in the safety strata
 table(appFinal_before_after %>% subset(risk_initial<0.01) %>% select(Strata_2_label), useNA="always")                       #Pb: 34,661 students in explore, 668 "safety and reach" and 11,398 NA
@@ -1968,23 +1972,24 @@ stargazer(ITT_1_risk, ITT_2_risk, ITT_3_risk, ITT_4_risk, ITT_5_risk, ITT_6_risk
 
 
 #RDD using the risk threshold
+#TODO: double check this!!
 appFinal_before_after %<>% mutate(dist_riskthreshold30=risk_initial-0.30)
 appFinal_before_after %<>% mutate(dist_riskthreshold70=risk_initial-0.70)
 
 rdd_plot70 <- rdplot(appFinal_before_after$risk_final, as.numeric(appFinal_before_after$dist_riskthreshold70), c=0, ci=95, kernel="triangular", nbins=10,  p=2,
                      title = "Change in Risk - Below/Above the 70% Threshold",
                      x.label = "Risk - Initial ROL", y.label = "Risk - Final ROL")
-rdd_plot70 
+rdd_plot70
 rdd_plot70 <- rdplot(appFinal_before_after$risk_final, as.numeric(appFinal_before_after$dist_riskthreshold70), c=0,
                      title = "Change in Risk - Below/Above the 70% Threshold",
                      x.label = "Risk - Initial ROL", y.label = "Risk - Final ROL")
-rdd_plot70 
+rdd_plot70
 
 
 rdd_plot30 <- rdplot(appFinal_before_after$risk_final, as.numeric(appFinal_before_after$dist_riskthreshold30), c=0,
                      title = "Change in Risk - Below/Above the 30% Threshold",
                      x.label = "Risk - Initial ROL", y.label = "Risk - Final ROL")
-rdd_plot30 
+rdd_plot30
 
 
 rdd_plot <- rdrobust(appFinal_before_after$risk_final, as.numeric(appFinal_before_after$dist_riskthreshold70), c=0, kernel="triangular", p=2)
@@ -2192,7 +2197,7 @@ summary(within_assign3)
 within_assign4 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1  & asignado_before==0), formula = asignado ~ abrio_cartilla)
 summary(within_assign4)
 within_assign5 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1  & asignado_before==0), formula = asignado ~ abrio_cartilla)
-summary(within_assign5) 
+summary(within_assign5)
 
 ##Outcome: Students who would have been assigned given their ex-ante ROL Only: Is the student assigned to a different program ex-post?
 within_assignprog1 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 &  Treatment_01 == 1  & asignado_before==1), formula = program_asig_change ~ abrio_cartilla)
@@ -2204,7 +2209,7 @@ summary(within_assignprog3)
 within_assignprog4 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1  & asignado_before==1), formula = program_asig_change ~ abrio_cartilla)
 summary(within_assignprog4)
 within_assignprog5 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1  & asignado_before==1), formula = program_asig_change ~ abrio_cartilla)
-summary(within_assignprog5) 
+summary(within_assignprog5)
 
 
 ##Outcome: Increased risk
@@ -2228,7 +2233,7 @@ summary(within_increasedrisk3_strata)
 within_increasedrisk4_strata = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1   & Strata_2_label=="Reach"), formula = increased_risk ~ abrio_cartilla)
 summary(within_increasedrisk4_strata)
 within_increasedrisk5_strata = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1   & Strata_2_label=="Reach"), formula = increased_risk ~ abrio_cartilla)
-summary(within_increasedrisk5_strata) 
+summary(within_increasedrisk5_strata)
 
 
 ##Outcome: Reduced risk
@@ -2253,7 +2258,7 @@ summary(within_reducedrisk3_strata)
 within_reducedrisk4_strata = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1  & Strata_2_label=="Safety"), formula = reduced_risk ~ abrio_cartilla)
 summary(within_reducedrisk4_strata)
 within_reducedrisk5_strata = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1  & Strata_2_label=="Safety"), formula = reduced_risk ~ abrio_cartilla)
-summary(within_reducedrisk5_strata) 
+summary(within_reducedrisk5_strata)
 
 ##Outcome: Change in risk
 within_changerisk1 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 &  Treatment_01 == 1  & risk_initial>0.7), formula = change_risk ~ abrio_cartilla)
@@ -2265,7 +2270,7 @@ summary(within_changerisk3)
 within_changerisk4= lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1  & risk_initial>0.7), formula = change_risk ~ abrio_cartilla)
 summary(within_changerisk4)
 within_changerisk5 = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1  & risk_initial>0.7), formula = change_risk ~ abrio_cartilla)
-summary(within_changerisk5) 
+summary(within_changerisk5)
 
 
 within_changerisk1_strata = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 &  Treatment_01 == 1  & Strata_2_label=="Safety" & change_risk!=0), formula = change_risk ~ abrio_cartilla)
@@ -2277,7 +2282,7 @@ summary(within_changerisk3_strata)
 within_changerisk4_strata= lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_1 == 1  & Strata_2_label=="Safety"), formula = change_risk ~ abrio_cartilla)
 summary(within_changerisk4_strata)
 within_changerisk5_strata = lm(data = appFinal_before_after %>% subset(propensity_score_sample==1 & Treatment_2 == 1 & Strata_2_label=="Safety"), formula = change_risk ~ abrio_cartilla)
-summary(within_changerisk5_strata) 
+summary(within_changerisk5_strata)
 
 
 stargazer(within_1, within_error1, within_assign1, within_reducedrisk1_strata,  title="Within-Treatment",

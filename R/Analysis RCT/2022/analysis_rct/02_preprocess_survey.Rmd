@@ -1,0 +1,215 @@
+
+---
+title: "Preprocess survey"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+header-includes:
+   - \usepackage{floatrow}
+   - \floatsetup[figure]{capposition=top}
+---
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+rm(list=ls())
+gc()
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(rlang)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(rddtools)
+library(parallel)
+library(evd)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+#library(tidyverse)
+library(haven)
+library(MASS)
+library(stringi)
+library(openxlsx)
+library(readxl)
+library(kableExtra)
+library(dplyr)
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+my_colors <- RColorBrewer::brewer.pal(4, "Pastel1")[1:2]
+myblue = '#2F5597'
+```
+
+```{r}
+dropbox_dir <- "~/Dropbox/"
+```
+
+# Analysis of Survey --------------------------
+
+## Data
+
+```{r}
+#Read All probabilities with Ratex too (fixed)
+probstrue <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/outputs/2022/probs_for_true_results_fixed_with_ratex.csv", sep=''), sep=',', header=TRUE)
+probsofficial <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/outputs/2022/probs_for_official_results_fixed_with_ratex.csv", sep=''), sep=',', header=TRUE)
+probspartial <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/outputs/2022/probs_for_partial_results_fixed_with_ratex.csv", sep=''), sep=',', header=TRUE)
+#NOTE: probstrue has as pref 1 the top-true pref and pref 2 the bottom-true pref
+probstrue %<>% dplyr::rename(codigo_carrera_top_true    = codigo_carrera_1,
+                             marca_top_true             = marca_1 ,
+                             puntpond_top_true          = puntpond_1 ,
+                             prob_interim_top_true      = prob_interim_1 ,
+                             prob_adaptive_top_true     = prob_adaptive_1 ,
+                             prob_ratex_top_true        = prob_ratex_1,
+                             codigo_carrera_bottom_true = codigo_carrera_2,
+                             marca_bottom_true          = marca_2 ,
+                             puntpond_bottom_true       = puntpond_2 ,
+                             prob_interim_bottom_true   = prob_interim_2 ,
+                             prob_adaptive_bottom_true  = prob_adaptive_2 ,
+                             prob_ratex_bottom_true     = prob_ratex_2) %>%
+                             select("MRUN",
+                                    "codigo_carrera_top_true",
+                                    "marca_top_true",
+                                    "puntpond_top_true",
+                                    "prob_interim_top_true",
+                                    "prob_adaptive_top_true",
+                                    "prob_ratex_top_true",
+                                    "codigo_carrera_bottom_true",
+                                    "marca_bottom_true",
+                                    "puntpond_bottom_true",
+                                    "prob_interim_bottom_true",
+                                    "prob_adaptive_bottom_true",
+                                    "prob_ratex_bottom_true")
+
+```
+
+```{r}
+survey <- readRDS(paste(dropbox_dir,"Mistakes Structural/Code/Python/Cartillas/outputs/2022/survey_processed_with_probs.rds", sep=''))
+#NOTE: this file has the subjective beliefs on probabilities (you can confirm this becaise probs have round values)
+# Merge survey with clean probs for toptrue and bottomtrue
+survey = merge(survey, probstrue %>% select(!c("codigo_carrera_top_true", "codigo_carrera_bottom_true","marca_top_true",
+                                               "puntpond_top_true", "marca_bottom_true", "puntpond_bottom_true")), by.x = "mrun", by.y = "MRUN", all.x = TRUE)
+
+dof <- merge(probsofficial, survey, by.x="MRUN", by.y="mrun", all.x=TRUE)
+
+dof %<>% mutate(responded_survey = ifelse(is.na(responded_survey), 0, responded_survey))
+```
+
+
+```{r}
+of <- read.csv(paste(dropbox_dir, "Mistakes Structural/Code/Python/Cartillas/data/2022/seleccion_20_01_22.csv", sep=''))
+#TODO: Check if this takes into account or not the BEA or PACE assignment (I think it doesn't and we are assuming that too)
+of_l <- reshape(of[,c(1,4:53)], direction='long',
+                    varying=colnames(of[,4:53]),
+                    times=c('01', '02', '03', '04', '05', '06', '07', '08', '09', '10'),
+                    v.names=c('cod_carrera_pref', 'estado_pref','ptje_pref', 'lugar_pref', 'pond_acad_pref'),
+                    idvar='mrun')
+colnames(of_l) <- c("mrun", "pref", "codigo_carrera", "marca", "orden", "puntano", "puntpond") # this is just me not knowing how to use reshape
+```
+
+```{r}
+car <- read.csv(paste(dropbox_dir, "/Mistakes Structural/Code/Python/Cartillas/data/2022/carreras_v2.csv", sep=''), header=TRUE, sep=";")
+cutoffs <- of_l %>% filter(marca == 24) %>% group_by(codigo_carrera) %>% dplyr::summarise(num_admitted = n(), min_score = pmax(min(puntpond), 210.0))
+car %<>% mutate(VACANTES_REG = VACANTES_1_SEMESTRE + VACANTES_2_SEMESTRE + SOBRECUPO_1_SEMESTRE + SOBRECUPO_2_SEMESTRE)
+car <- merge(car, cutoffs, by.x="CODIGO_DEMRE", by.y="codigo_carrera", all.x=TRUE)
+```
+
+```{r}
+pref_assignment <- of_l %>% filter(marca == 24) %>% dplyr::select(mrun, codigo_carrera) %>% dplyr::rename(MRUN = mrun, codigo_carrera_assigned = codigo_carrera)
+```
+
+```{r}
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, VACANTES_REG, num_admitted, min_score) %>%
+               mutate(min_score = ifelse(num_admitted < VACANTES_REG, 210.0, min_score)) %>%
+               dplyr::rename(vacants_top_true = VACANTES_REG,
+                             num_admitted_top_true = num_admitted,
+                             min_score_top_true = min_score), by.x="codigo_carrera_top_true", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, VACANTES_REG, num_admitted, min_score) %>%
+               mutate(min_score = ifelse(num_admitted < VACANTES_REG, 210.0, min_score)) %>%
+               dplyr::rename(vacants_bottom_true = VACANTES_REG,
+                             num_admitted_bottom_true = num_admitted,
+                             min_score_bottom_true = min_score), by.x="codigo_carrera_bottom_true", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+dof <- merge(dof, car %>% dplyr::select(CODIGO_DEMRE, VACANTES_REG, num_admitted, min_score) %>%
+               mutate(min_score = ifelse(num_admitted < VACANTES_REG, 210.0, min_score)) %>%
+               dplyr::rename(vacants_single_choice = VACANTES_REG,
+                             num_admitted_single_choice = num_admitted,
+                             min_score_single_choice = min_score), by.x="codigo_carrera_single_choice", by.y="CODIGO_DEMRE", all.x=TRUE)
+
+
+dof %<>% mutate(applied_to_top_true = ifelse(codigo_carrera_top_true == codigo_carrera_1 | codigo_carrera_top_true == codigo_carrera_2 |
+                                              codigo_carrera_top_true == codigo_carrera_3 | codigo_carrera_top_true == codigo_carrera_4 |
+                                              codigo_carrera_top_true == codigo_carrera_5 | codigo_carrera_top_true == codigo_carrera_6 |
+                                              codigo_carrera_top_true == codigo_carrera_7 | codigo_carrera_top_true == codigo_carrera_8 |
+                                              codigo_carrera_top_true == codigo_carrera_9 | codigo_carrera_top_true == codigo_carrera_10, 1, 0),
+                applied_to_bottom_true= ifelse(codigo_carrera_bottom_true == codigo_carrera_1 | codigo_carrera_bottom_true == codigo_carrera_2 |
+                                              codigo_carrera_bottom_true == codigo_carrera_3 | codigo_carrera_bottom_true == codigo_carrera_4 |
+                                              codigo_carrera_bottom_true == codigo_carrera_5 | codigo_carrera_bottom_true == codigo_carrera_6 |
+                                              codigo_carrera_bottom_true == codigo_carrera_7 | codigo_carrera_bottom_true == codigo_carrera_8 |
+                                              codigo_carrera_bottom_true == codigo_carrera_9 | codigo_carrera_bottom_true == codigo_carrera_10, 1, 0),
+                applied_to_single_choice = ifelse(codigo_carrera_single_choice == codigo_carrera_1 | codigo_carrera_single_choice == codigo_carrera_2 |
+                                              codigo_carrera_single_choice == codigo_carrera_3 | codigo_carrera_single_choice == codigo_carrera_4 |
+                                              codigo_carrera_single_choice == codigo_carrera_5 | codigo_carrera_single_choice == codigo_carrera_6 |
+                                              codigo_carrera_single_choice == codigo_carrera_7 | codigo_carrera_single_choice == codigo_carrera_8 |
+                                              codigo_carrera_single_choice == codigo_carrera_9 | codigo_carrera_single_choice == codigo_carrera_10, 1, 0) )
+
+dof %<>% mutate(single_choice_is_top_true = ifelse(codigo_carrera_single_choice == codigo_carrera_top_true, 1, 0),
+                single_choice_is_bottom_true = ifelse(codigo_carrera_single_choice == codigo_carrera_bottom_true, 1, 0), )
+
+dof %<>% mutate(pref_of_single_choice = ifelse(applied_to_single_choice == 1,
+                                               as.character((codigo_carrera_single_choice == codigo_carrera_1)*1 + (codigo_carrera_single_choice == codigo_carrera_2)*2 +
+                                                 (codigo_carrera_single_choice == codigo_carrera_3)*3 + (codigo_carrera_single_choice == codigo_carrera_4)*4 +
+                                                 (codigo_carrera_single_choice == codigo_carrera_5)*5 + (codigo_carrera_single_choice == codigo_carrera_6)*6 +
+                                                 (codigo_carrera_single_choice == codigo_carrera_7)*7 + (codigo_carrera_single_choice == codigo_carrera_8)*8 +
+                                                 (codigo_carrera_single_choice == codigo_carrera_9)*9 + (codigo_carrera_single_choice == codigo_carrera_10)*10),
+                                               ifelse(single_choice_is_top_true == 1, "TT",
+                                                      ifelse(single_choice_is_bottom_true == 1, "BT",
+                                                             ifelse(!is.na(codigo_carrera_single_choice), "Other", "NR")) ) ))
+
+dof$pref_of_single_choice[is.na(dof$pref_of_single_choice)] <- "NR"
+
+dof$pref_of_single_choice <- factor(dof$pref_of_single_choice, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "TT", "BT", "Other", "NR"))
+
+```
+
+```{r}
+dof <- merge(dof, pref_assignment, by="MRUN", all.x=TRUE)
+```
+
+```{r}
+dof %>% group_by(codigo_carrera_assigned == codigo_carrera_single_choice) %>% tally()
+```
+
+
+```{r}
+dof %>% filter(!is.na(codigo_carrera_single_choice)) %>% dplyr::mutate(tot = n()) %>% group_by(pref_of_single_choice) %>% dplyr::summarise(pct = n()/tot) %>% distinct(pref_of_single_choice, pct) %>%
+  ggplot(aes(x=pref_of_single_choice, y=pct)) + geom_bar(stat="identity", fill=my_colors[2]) +
+    labs(x="Preference of Single Choice", y="Density") +
+    scale_y_continuous(expand=c(0,0)) +
+    theme_bw() + theme(legend.position = 'bottom', legend.title=element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+ggsave(paste(dropbox_dir,"Mistakes Structural/Code/R/plots/single_choice.pdf", sep=''))
+```
+
+
+
+

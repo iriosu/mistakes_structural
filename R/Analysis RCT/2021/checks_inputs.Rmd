@@ -1,0 +1,553 @@
+---
+title: "Analysis"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+---
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+rm(list=ls())
+gc()
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(rddtools)
+library(parallel)
+library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+library(haven)
+library(tidyverse)
+```
+
+```{r}
+dropbox_dir <- "~/Dropbox/"
+# indir <- paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/data/2022/", sep="")
+# outdir <- paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/outputs/2022/", sep="")
+indir <- paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/data/2021/", sep="")
+outdir <- paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/outputs/2021/", sep="")
+```
+
+
+# Load data
+```{r}
+carreras       <- read.csv(paste(indir, "carreras.csv", sep=""),sep=';', header=TRUE)
+students       <- read.csv(paste(indir,"raw/adm2021_archivo_C_demre_2021feb08_MRUN_Compartir.csv", sep=""), sep=';', header=TRUE)
+bea            <- read.csv(paste(indir,"raw/15-01-21_Preseleccionados_BEA_DEMRE_MRUN.csv", sep=""), sep=';', header=TRUE)
+applications   <- read.csv(paste(indir,"raw/Reporte_diario_postulaciones_2_mrun.csv", sep=""), sep=',', header=TRUE)
+inscritos      <- read.csv(paste(indir,"raw/Inscritos_final_febrero_MRUN.csv", sep=""), sep=';', header=TRUE)
+```
+
+# Consistencia de datos
+## Merge applications and scores
+TEST: todos los alumnos con postulaciones estan en el archivo de puntajes
+RESULTADO: 
+
+```{r}
+applications %>% filter(!(mrun %in% students$mrun)) %>% pull(mrun) 
+```
+
+## Merge students y bea
+TEST: todos los alumnos con puntajes marcados como BEA deben estar en la lista de preseleccionados
+RESULTADO: 
+
+```{r}
+students$bea <- as.character(students$bea)
+```
+
+```{r}
+pids1 <- bea %>% pull(mrun)
+pids2 <- students %>% filter(bea == "BEA") %>% pull(mrun)
+students %>% filter(bea == "BEA") %>% filter(!(mrun %in% pids1)) %>% pull(mrun) 
+```
+
+Pueden haber BEAs que no estan en students. Esto porque no todos los BEA rinden la prueba. Sin embargo, no deberian haber estudiantes marcados como BEA en students que no estan en BEA.
+
+
+# Preprocesamiento
+
+```{r}
+preprocessing <- read.csv(paste(outdir, "preprocessing.csv", sep=""), sep=";", header=TRUE)
+```
+
+
+```{r}
+df <- merge(students, applications, by="mrun")
+```
+
+ISSUE: hay muchos estudiantes (8914) que satisfacen los requisitos segun el input, pero no satisfacen el minimo de 450 CRUCH. Esto NO es expliado por la regla del 10% de mejor rendimiento de su establecimiento.
+
+```{r}
+df$promedio_notas <- as.numeric(str_replace(as.character(df$promedio_notas), ',', '.'))
+df$promedio_cm_actual <- as.numeric(str_replace(as.character(df$promedio_cm_actual), ',', '.'))
+df$promedio_lm_anterior <- as.numeric(str_replace(as.character(df$promedio_lm_anterior), ',', '.'))
+df$is_pace = ifelse(df$pace == "PACE", 1, 0)
+
+df$promedio_lm_max = ifelse(df$promedio_cm_actual > df$promedio_lm_anterior, df$promedio_cm_actual, df$promedio_lm_anterior)
+
+df %<>% mutate(number_apps = (car_codigo_1prefer > 0) + (car_codigo_2prefer > 0) + (car_codigo_3prefer > 0) + (car_codigo_4prefer > 0) + (car_codigo_5prefer > 0) +
+                              (car_codigo_6prefer > 0) + (car_codigo_7prefer > 0) + (car_codigo_8prefer > 0) + (car_codigo_9prefer > 0) + (car_codigo_10prefer > 0), 
+               number_valid_apps = (!is.na(puntaje_carr1) & puntaje_carr1 > 0) + (!is.na(puntaje_carr2) & puntaje_carr2 > 0) + 
+                                   (!is.na(puntaje_carr3) & puntaje_carr3 > 0) + (!is.na(puntaje_carr4) & puntaje_carr4 > 0) + 
+                                   (!is.na(puntaje_carr5) & puntaje_carr5 > 0) + (!is.na(puntaje_carr6) & puntaje_carr6 > 0) + 
+                                   (!is.na(puntaje_carr7) & puntaje_carr7 > 0) + (!is.na(puntaje_carr8) & puntaje_carr8 > 0) + 
+                                   (!is.na(puntaje_carr9) & puntaje_carr9 > 0) + (!is.na(puntaje_carr10) & puntaje_carr10 > 0) )
+
+```
+
+```{r}
+df %>% filter(is_pace == 0) %>% filter(promedio_lm_max < 450 & number_valid_apps > 0) %>% nrow()
+```
+
+Para entender esto en detalle, pegamos los resultados oficiales del proceso y comparamos las marcas.
+
+```{r}
+library(tidyverse)
+library(haven)
+
+c21 <- read_dta(file = paste(dropbox_dir, "Mistakes Structural/Data/2021/ABCD 2021 with MRUN/archivo_C_innominado.dta", sep="")) 
+d21 <- read_dta(file = paste(dropbox_dir, "Mistakes Structural/Data/2021/ABCD 2021 with MRUN/archivo_D_innominado.dta", sep="")) 
+```
+
+```{r}
+colnames(c21)
+colnames(d21)
+```
+
+
+```{r}
+of <- merge(d21, c21 %>% dplyr::select(-c("bea", "anyo_proceso")), by="mrun")
+```
+
+```{r}
+colnames(of)[2:length(colnames(of))] <- paste(colnames(of)[2:length(colnames(of))], "_post", sep="")
+```
+
+```{r}
+aux <- merge(df, d21, by="mrun")
+```
+
+```{r}
+aux %<>% mutate(number_valid_apps_D = (estado_pref_01 %in% c(24,25,26)) + (estado_pref_02 %in% c(24,25,26)) + 
+                                      (estado_pref_03 %in% c(24,25,26)) + (estado_pref_04 %in% c(24,25,26)) + 
+                                      (estado_pref_05 %in% c(24,25,26)) + (estado_pref_06 %in% c(24,25,26)) + 
+                                      (estado_pref_07 %in% c(24,25,26)) + (estado_pref_08 %in% c(24,25,26)) + 
+                                      (estado_pref_09 %in% c(24,25,26)) + (estado_pref_10 %in% c(24,25,26)) )
+```
+
+
+```{r}
+aux %>% filter(number_valid_apps > number_valid_apps_D) %>% dplyr::select(mrun, number_valid_apps, number_valid_apps_D, 
+                                                                          car_codigo_1prefer, cod_carrera_pref_01, 
+                                                                          car_codigo_2prefer, cod_carrera_pref_02, 
+                                                                          car_codigo_3prefer, cod_carrera_pref_03, 
+                                                                          car_codigo_4prefer, cod_carrera_pref_04, 
+                                                                          car_codigo_5prefer, cod_carrera_pref_05, 
+                                                                          car_codigo_6prefer, cod_carrera_pref_06, 
+                                                                          car_codigo_7prefer, cod_carrera_pref_07, 
+                                                                          car_codigo_8prefer, cod_carrera_pref_08, 
+                                                                          car_codigo_9prefer, cod_carrera_pref_09, 
+                                                                          car_codigo_10prefer, cod_carrera_pref_10 )
+```
+Es decir, son 25,999 alumnos cuyo preprocesamiento es incorrecto. Solo para dar un ejemplo:
+
+
+# Valido en interim, no valido en post
+```{r}
+aux %>% filter(puntaje_carr1 > 0 & !(estado_pref_01 %in% c(24, 25, 26)) & car_codigo_1prefer == cod_carrera_pref_01) %>% group_by(estado_pref_01) %>% tally()
+aux %>% filter(puntaje_carr1 > 0 & !(estado_pref_01 %in% c(24, 25, 26)) & car_codigo_1prefer == cod_carrera_pref_01) %>% group_by(estado_pref_01) %>% dplyr::summarise(min(mrun))
+```
+
+```{r}
+aux %>% filter(puntaje_carr1 > 0 & (estado_pref_01 %in% c(17)) & car_codigo_1prefer == cod_carrera_pref_01) %>% group_by(cod_carrera_pref_01) %>% tally() %>% arrange(-n)
+```
+
+```{r}
+programs <- aux %>% filter(puntaje_carr1 > 0 & (estado_pref_01 %in% c(17)) & car_codigo_1prefer == cod_carrera_pref_01) %>% group_by(cod_carrera_pref_01) %>% pull(cod_carrera_pref_01)
+carreras %>% filter(!(CODIGO %in% programs)) %>% dplyr::select(CODIGO)
+```
+
+```{r}
+aux2 <- merge(aux, carreras, by.x="cod_carrera_pref_01", by.y="CODIGO")
+aux2 %>% filter(puntaje_carr1 > 0 & (estado_pref_01 %in% c(17)) & car_codigo_1prefer == cod_carrera_pref_01) %>% dplyr::select(cod_carrera_pref_01, puntaje_carr1, PONDERADO_MINIMO) %>% ggplot(aes(x=puntaje_carr1, y=PONDERADO_MINIMO)) + geom_point()
+```
+
+
+RESLTADO: hay discreancias en muchas marcas
+
+#### CASO 0: MRUN 16551
+```{r}
+id = 16551
+df %>% filter(mrun == id) %>% dplyr::select(car_codigo_1prefer, puntaje_carr1, ptje_nem, ptje_ranking, clec_actual, mate_actual, hcso_actual)
+of %>% filter(mrun == id) %>% dplyr::select(cod_carrera_pref_01_post, estado_pref_01_post, ptje_pref_01_post, ptje_nem_post, ptje_ranking_post, clec_actual_post, mate_actual_post, hcso_actual_post)
+
+```
+
+```{r}
+carreras %>% filter(CODIGO == 15271)
+```
+
+
+#### CASO 1: MRUN 772
+```{r}
+df %>% filter(mrun == 772) %>% dplyr::select(car_codigo_1prefer, puntaje_carr1, ptje_nem, ptje_ranking, clec_actual, mate_actual, hcso_actual)
+of %>% filter(mrun == 772) %>% dplyr::select(cod_carrera_pref_01_post, estado_pref_01_post, ptje_pref_01_post, ptje_nem_post, ptje_ranking_post, clec_actual_post, mate_actual_post, hcso_actual_post)
+```
+
+
+#### CASO 2: MRUN 1400677
+```{r}
+id = 1400677
+df %>% filter(mrun == id) %>% dplyr::select(car_codigo_1prefer, puntaje_carr1, ptje_nem, ptje_ranking, clec_actual, mate_actual, hcso_actual)
+of %>% filter(mrun == id) %>% dplyr::select(cod_carrera_pref_01_post, estado_pref_01_post, ptje_pref_01_post, ptje_nem_post, ptje_ranking_post, clec_actual_post, mate_actual_post, hcso_actual_post)
+```
+
+
+```{r}
+write.csv(aux %>% filter(puntaje_carr1 > 0 & !(estado_pref_01 %in% c(24, 25, 26)) & car_codigo_1prefer == cod_carrera_pref_01) %>% dplyr::select(mrun, car_codigo_1prefer, cod_carrera_pref_01, puntaje_carr1, ptje_pref_01, estado_pref_01) %>% dplyr::rename(codigo_carrera_interim = car_codigo_1prefer, codigo_carrera_expost = cod_carrera_pref_01, puntaje_interim = puntaje_carr1, puntaje_expost = ptje_pref_01, estado_expost = estado_pref_01), paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/data/2021/muestra_diferencias_preprocesamiento_2021.csv", sep=""), row.names=FALSE)
+```
+
+# No valido en interim y valido en post
+
+```{r}
+aux %>% filter(puntaje_carr1 == -1 & (estado_pref_01 %in% c(24, 25, 26)) & car_codigo_1prefer == cod_carrera_pref_01) %>% group_by(estado_pref_01) %>% tally()
+aux %>% filter(puntaje_carr1 == -1 & (estado_pref_01 %in% c(24, 25, 26)) & car_codigo_1prefer == cod_carrera_pref_01) %>% group_by(estado_pref_01) %>% dplyr::summarise(min(mrun))
+aux %>% filter(puntaje_carr1 == -1 & (estado_pref_01 %in% c(24, 25, 26)) & car_codigo_1prefer == cod_carrera_pref_01) %>% group_by(estado_pref_01) %>% dplyr::summarise(max(mrun))
+```
+
+#### CASO 1: MRUN 1176989	
+```{r}
+id = 1176989	
+df %>% filter(mrun == id) %>% dplyr::select(car_codigo_1prefer, puntaje_carr1, ptje_nem, ptje_ranking, clec_actual, mate_actual, hcso_actual)
+of %>% filter(mrun == id) %>% dplyr::select(cod_carrera_pref_01_post, estado_pref_01_post, ptje_pref_01_post, ptje_nem_post, ptje_ranking_post, clec_actual_post, mate_actual_post, hcso_actual_post)
+```
+
+#### CASO 2: MRUN 26241400	
+```{r}
+id = 26241400		
+df %>% filter(mrun == id) %>% dplyr::select(car_codigo_1prefer, puntaje_carr1, ptje_nem, ptje_ranking, clec_actual, mate_actual, hcso_actual)
+of %>% filter(mrun == id) %>% dplyr::select(cod_carrera_pref_01_post, estado_pref_01_post, ptje_pref_01_post, ptje_nem_post, ptje_ranking_post, clec_actual_post, mate_actual_post, hcso_actual_post)
+```
+
+RESULTADO: en ambos casos, el alumno SI actualizo sus puntajes NEM y RANKING
+
+```{r}
+write.csv(aux %>% filter(puntaje_carr1 == -1 & (estado_pref_01 %in% c(24, 25, 26)) & car_codigo_1prefer == cod_carrera_pref_01) %>% dplyr::select(mrun, car_codigo_1prefer, cod_carrera_pref_01, puntaje_carr1, ptje_pref_01, estado_pref_01) %>% dplyr::rename(codigo_carrera_interim = car_codigo_1prefer, codigo_carrera_expost = cod_carrera_pref_01, puntaje_interim = puntaje_carr1, puntaje_expost = ptje_pref_01, estado_expost = estado_pref_01), paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/data/2021/muestra_diferencias_0_1_preprocesamiento_2021.csv", sep=""), row.names=FALSE)
+```
+
+
+# Coincidentes (ambos no validos)
+
+```{r}
+aux %>% filter(puntaje_carr1 == -1 & !(estado_pref_01 %in% c(24, 25, 26)) & car_codigo_1prefer == cod_carrera_pref_01) %>% group_by(estado_pref_01) %>% tally()
+```
+
+
+
+```{r}
+write.csv(aux %>% filter(puntaje_carr1 == -1 & !(estado_pref_01 %in% c(0, 24, 25, 26)) & car_codigo_1prefer == cod_carrera_pref_01) %>% dplyr::select(mrun, car_codigo_1prefer, cod_carrera_pref_01, puntaje_carr1, ptje_pref_01, estado_pref_01) %>% dplyr::rename(codigo_carrera_interim = car_codigo_1prefer, codigo_carrera_expost = cod_carrera_pref_01, puntaje_interim = puntaje_carr1, puntaje_expost = ptje_pref_01, estado_expost = estado_pref_01), paste(dropbox_dir, "Mistakes/Code/Python/Cartillas/data/2021/muestra_similitudes_preprocesamiento_2021.csv", sep=""), row.names=FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## OLD
+
+
+```{r}
+aux %>% filter(puntaje_carr1 == -1 & !(estado_pref_01 %in% c(24, 25, 26)) & car_codigo_1prefer == cod_carrera_pref_01) %>% group_by(estado_pref_01) %>% tally() 
+```
+
+```{r}
+aux %>% filter(puntaje_carr1 == -1 & (estado_pref_01 %in% c(24, 25, 26)) & car_codigo_1prefer == cod_carrera_pref_01) %>% dplyr::select(mrun, promedio_notas, porc_sup_notas, car_codigo_1prefer, puntaje_carr1, ptje_pref_01, estado_pref_01 )
+```
+
+
+
+```{r}
+students21$promedio_notas <- as.numeric(as.character(students21$promedio_notas))
+students21 %>% filter(promedio_notas == 4.1) %>% dplyr::select(ptje_nem, porc_sup_notas)
+
+students21 %>% group_by(promedio_notas) %>% tally()
+```
+
+
+```{r}
+students21 %>% ggplot(aes(x=promedio_notas, y=porc_sup_notas)) + geom_point()
+```
+
+
+
+
+## Merge applications and inscritos
+```{r}
+test <- merge(applications21, inscritos21, by="mrun")
+```
+
+RESULTADO: Esto si funciona.
+
+## Merge applications and bea 
+
+ISSUE 2: varios estudiantes BEA no estan ni en archivo de puntajes ni en postulaciones. Eso podria significar que simplemente no postulan.
+
+```{r}
+bea21$bea <- 1
+```
+
+```{r}
+bf <- merge(students21, bea21[,c('mrun', 'bea')], by='mrun')
+```
+
+
+```{r}
+carreras <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/carreras.csv", sep=';', header=TRUE)
+```
+
+
+# Check admission probabilities
+
+```{r}
+library(tidyverse)
+library(haven)
+d21 <- read_dta(file = "/Users/iriosu/Dropbox/Mistakes Structural/Data/2021/ABCD 2021 with MRUN/archivo_D_innominado.dta")
+d21 %<>% ungroup %>% as.data.frame()
+inp <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/Reporte_diario_postulaciones_final_mrun.csv", sep=",", header=TRUE)
+```
+
+```{r}
+d21_l <- reshape(d21[,c(1,4:53)], direction='long', 
+                    varying=colnames(d21[,4:53]), 
+                    times=c('01', '02', '03', '04', '05', '06', '07', '08', '09', '10'),
+                    v.names=c('cod_carrera_pref', 'estado_pref','ptje_pref', 'lugar_pref', 'pond_acad_pref'),
+                    idvar='mrun')
+
+colnames(d21_l) <- c("id", "pref", "codigo_carrera", "marca", "orden", "puntano", "puntpond") # this is just me not knowing how to use reshape
+d21_l$puntpond <- as.numeric(str_replace(as.character(d21_l$puntpond ),",", "."))
+```
+
+```{r}
+## Compute cutoffs
+cutoffs_2021 <- d21_l %>% filter(marca == 24) %>% group_by(codigo_carrera) %>% dplyr::summarise(cutoff = min(puntpond)) %>% ungroup %>% as.data.frame()
+```
+
+
+
+```{r}
+exante <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2021_RCT/applications_and_probs.csv", sep=";", header=TRUE)
+```
+
+```{r}
+rec <- read.csv(file = "~/Dropbox/Mistakes/Code/R/recommendation/outputs/df_merge_recommendations.csv")
+```
+
+```{r}
+hist(rec %>% filter(!is.na(codigo_carrera_1) & puntpond_1 > 0) %>% pull(prob_1))
+hist(rec %>% filter(!is.na(codigo_carrera_2) & puntpond_2 > 0) %>% pull(prob_2))
+hist(rec %>% filter(!is.na(codigo_carrera_3) & puntpond_3 > 0) %>% pull(prob_3))
+hist(rec %>% filter(!is.na(codigo_carrera_4) & puntpond_4 > 0) %>% pull(prob_4))
+```
+
+```{r}
+rec %>% filter(mrun %in% applications21$mrun) %>% mutate(new_message = ifelse(prob_1 >= 0.99, 1, ifelse(overall_prob < 0.99, 2, 3))) %>% group_by(new_message) %>% tally()
+```
+
+```{r}
+rec %>% filter(mrun %in% applications21$mrun) %>% group_by(general_message) %>% tally()
+```
+
+
+```{r}
+rec %>% filter(overall_prob >= 0.99 & prob_1 < 0.99 & mrun %in% applications21$mrun) %>% nrow()
+rec %>% filter(prob_1 >= 0.99 & mrun %in% applications21$mrun) %>% nrow()
+rec %>% filter(overall_prob < 0.99 & mrun %in% applications21$mrun) %>% nrow()
+rec %>% filter(mrun %in% applications21$mrun) %>% nrow()
+```
+
+
+```{r}
+rec %>% filter(overall_prob < 0.99  & mrun %in% applications21$mrun) %>% nrow()
+rec %>% filter(overall_prob > 0.9 & overall_prob < 0.99 & mrun %in% applications21$mrun) %>% nrow()
+rec %>% filter(overall_prob > 0.8 & overall_prob < 0.90 & mrun %in% applications21$mrun) %>% nrow()
+rec %>% filter(mrun %in% applications21$mrun) %>% nrow()
+rec %>% nrow()
+```
+
+```{r}
+rec %>% filter(prob_1 >= 0.99 & mrun %in% applications21$mrun) %>% nrow()
+```
+
+
+
+```{r}
+colnames(exante)
+```
+
+```{r}
+colnames(d21)
+```
+
+
+```{r}
+ivd <- merge(d21, exante, by.x="mrun", by.y="MRUN_exante")
+ivd <- merge(ivd, cutoffs_2021, by.x="codigo_carrera_1_exante", by.y="codigo_carrera")
+```
+
+```{r}
+ivd %>% filter(codigo_carrera_1_exante == cod_carrera_pref_01) %>% filter(estado_pref_01 == 24 & prob_1_exante == 0 & puntpond_1_exante > 0) %>% group_by(cod_carrera_pref_01) %>% tally() %>% arrange(-n)
+```
+
+```{r}
+ivd %>% filter(codigo_carrera_1_exante == cod_carrera_pref_01) %>% filter(estado_pref_01 == 24 & prob_1_exante == 0 & puntpond_1_exante > 0) %>% dplyr::select(mrun, codigo_carrera_1_exante, ptje_pref_01, puntpond_1_exante, cutoff)
+```
+
+```{r}
+cdf_reg <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2021/cdf_cutoffs_reg.csv", sep=";", header=TRUE)
+```
+
+```{r}
+cdf_reg %>% filter(codigo_carrera == 11055) %>% dplyr::select(X695, X696, X697, X698, X699)
+```
+
+
+
+```{r}
+interim <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2021_interim_apps/applications_and_probs_last.csv", sep=";", header=TRUE)
+expost <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2021_final_apps/applications_and_probs_last.csv", sep=";", header=TRUE)
+```
+
+```{r}
+colnames(exante) <- paste(colnames(exante), "exante", sep = "_")
+colnames(interim) <- paste(colnames(interim), "interim", sep = "_")
+colnames(expost) <- paste(colnames(expost), "expost", sep = "_")
+```
+
+```{r}
+mg <- merge(interim, expost, by.x="MRUN_interim", by.y="MRUN_expost", all.x=TRUE)
+mg <- merge(mg, exante, by.x="MRUN_interim", by.y="MRUN_exante", all.x=TRUE)
+```
+
+
+
+
+```{r}
+mg1 <- mg %>% filter(codigo_carrera_1_interim == codigo_carrera_1_expost) %>% dplyr::select(MRUN_interim, codigo_carrera_1_interim, prob_1_exante, prob_1_interim, prob_1_expost, puntpond_1_exante, puntpond_1_interim, puntpond_1_expost) %>% mutate(diff = abs(prob_1_interim-prob_1_expost), diff_2 = abs(prob_1_exante-prob_1_expost)) %>% group_by(codigo_carrera_1_interim) %>% mutate(n_apps=n(), n_bad = sum(diff > 0.5)) %>% ungroup %>% as.data.frame()
+```
+
+```{r}
+colnames(mg1)
+```
+
+
+```{r}
+hist(mg1$diff)
+```
+
+
+```{r}
+mg1 %>% arrange(-n_bad, -n_apps) %>% filter(diff_2 > 0.5) %>% dplyr::select(MRUN_interim, codigo_carrera_1_interim, n_apps, n_bad, prob_1_exante, prob_1_interim, prob_1_expost, puntpond_1_exante, puntpond_1_interim, puntpond_1_expost )
+```
+
+```{r}
+car <- read.csv("/Users/iriosu/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/carreras.csv", sep=";", header=TRUE)
+```
+
+```{r}
+carreras %>% group_by(CAR_PEDAGOGIA) %>% tally()
+```
+
+```{r}
+dp21 <- merge(d21, students21, by="mrun", all.x=TRUE)
+```
+
+```{r}
+colnames(dp21)
+```
+
+
+```{r}
+
+dp21 %>% filter(estado_pref_01 == 40 & porc_sup_notas > 0) %>% dplyr::summarise(min(porc_sup_notas), max(percentil_cm_actual), max(as.numeric(as.character(promedio_cm_actual)), na.rm=TRUE) )
+```
+
+```{r}
+dp21 %>% filter(estado_pref_01 >= 50) %>% nrow()
+```
+
+
+# ============================
+# Proceso 2021 de primer año
+# ============================
+```{r}
+mat_2 <- read.csv("/Users/iriosu/Dropbox/DEMRE - Datos/2021/D_MATRICULA_PDT__2021_PUB_MRUN.csv", header=TRUE, sep=';')
+c21_2 <- read.csv("/Users/iriosu/Dropbox/DEMRE - Datos/2021/A_INSCRITOS_PUNTAJES_PDT_2021_PUB_MRUN.csv", header=TRUE, sep=';')
+d21_2 <- read.csv("/Users/iriosu/Dropbox/DEMRE - Datos/2021/C_POSTULANTES_SELECCION_PDT_2021_PUB_MRUN.csv", header=TRUE, sep=';')
+```
+
+```{r}
+df_2 <- merge(c21_2, d21_2 %>% dplyr::select(c("MRUN",setdiff(colnames(d21_2), colnames(c21_2)))), by="MRUN")
+df_2 <- merge(df_2, mat_2 %>% dplyr::select(c("MRUN",setdiff(colnames(mat_2), colnames(df_2)))), by="MRUN")
+colnames(c21_2)
+colnames(d21_2)
+colnames(mat_2)
+```
+
+```{r}
+missings <- setdiff(unique(mat_2$MRUN), unique(df_2$MRUN))
+```
+
+
+```{r}
+mat_2 %>% filter(MRUN %in% missings) %>% group_by(VIA_ADMISION) %>% tally()
+df_2 %>% group_by(VIA_ADMISION) %>% tally()
+```
+```{r}
+df_2 %>% group_by(VIA_ADMISION) %>% tally()
+```
+
+
+
+```{r}
+
+df_2 %>% group_by(ANYO_DE_EGRESO) %>% tally()
+```
+
+

@@ -1,0 +1,183 @@
+---
+title: "Analysis"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+---
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+rm(list=ls())
+gc()
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+#library(rddtools)
+library(parallel)
+library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+```
+
+```{r}
+dropbox_dir = "~/Dropbox/"
+```
+
+```{r}
+students21 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/official/adm2021_archivo_C_demre_2021feb08_MRUN_Compartir.csv", sep=';', header=TRUE)
+bea <- read.csv('~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/15-01-21_Preseleccionados_BEA_DEMRE_MRUN.csv', sep=';', header=TRUE)
+inscritos21 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/official/Inscritos_final_febrero_MRUN_Compartir.csv", sep=';', header=TRUE)
+applications21 <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/Reporte_diario_postulaciones_final_mrun.csv", sep=',', header=TRUE)
+
+
+probs <- read.csv('~/Dropbox/Mistakes/Code/Python/Cartillas/outputs/2021_RCT/applications_and_probs.csv', header=TRUE, sep=';')
+
+pace <- read.csv("~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/6_ALUMNOS_PACE_20210118_MRUN.csv", header=TRUE, sep=';')
+lml <- read.csv('~/Dropbox/Mistakes/Code/Python/Cartillas/data/2021/plm_level.csv', header=TRUE, sep=',')
+```
+
+```{r}
+applications21$applied <- 1
+applications21$any_valid <- ifelse(applications21$puntaje_carr1 <= 0, 0, 1)
+# probs <- probs %>% dplyr::select(MRUN, overall_prob, prob_1) %>% as.data.frame()
+```
+
+
+# Merge sources of data
+```{r}
+df <- merge(inscritos21[,c("mrun", "genero")], students21[,c("mrun", "rama_educacional",  "grupo_dependencia","codigo_region","ptje_nem","ptje_ranking")])
+df <- merge(df, applications21[,c("mrun", "applied", "any_valid")], all.x=TRUE)
+df <- merge(df, probs[,c("MRUN", "overall_prob", "prob_1")], by.x="mrun", by.y="MRUN", all.x=TRUE)
+pace$pace <- 1
+df <- merge(df, pace[,c("mrun", "pace")], by='mrun', all.x=TRUE)
+df <- merge(df, lml, by='mrun', all.x=TRUE)
+```
+
+```{r}
+df[is.na(df)] <- 0
+
+df %<>% mutate(general_message = ifelse(prob_1 == 1, 3, ifelse(overall_prob >= 0.7 & overall_prob < 1 & pace == 0, 2, ifelse(overall_prob < 0.7 & pace == 0, 1, 0)  )) )
+# df %<>% mutate(general_message = ifelse(prob_1 == 1, 3, ifelse(overall_prob >= 0.7 & overall_prob <= 1 & pace == 0, 2, ifelse(overall_prob < 0.7 & pace == 0, 1, 0)  )) )
+```
+
+
+
+```{r}
+df %>% filter(prob_1 < 0.01 & overall_prob < 0.1 & applied == 1)
+```
+
+# General message = 0 (default): 49467, 52750
+# General message = 1 (overall_prob < 0.7): 40371,43134
+# General message = 2 (overall_prob >= 0.7 & < 1): 65031, 75474
+# General message = 3 (overall_prob == 1 & prob_1 == 1): 18358, 22789
+
+# PDT (message 3 - good): 12296, 67847
+# PDT (no message, cases bad and medium): 68551, 80924
+
+# No application score (not valid): 132881, 232101
+
+# Prob in top choice < 0.01 (red flag) but good general admission prob: 13838, 16551
+# Prob in top choice < 0.01 (red flag) and bad general admission prob: 27721, 28568
+
+
+
+## Merge with recommendation
+
+```{r}
+recommenendations_df_long <- read.csv("~/Dropbox/Mistakes/Code/R/recommendation/outputs/recommendations.csv", header=TRUE, sep=',')
+recommenendations_df_wide = reshape(recommenendations_df_long, v.names = c("Major_ID"),
+                       timevar="Rec", idvar=c("MRUN"), direction="wide", sep = "_")
+colnames(recommenendations_df_wide) = c("MRUN", "Rec_1", "Rec_2", "Rec_3", "Rec_4")
+# Merge with df and overallprob
+df = merge(df, recommenendations_df_wide, by.x="mrun", by.y="MRUN", all.x = TRUE)
+df = merge(df %>% select(-prob_1), probs %>% select(-overall_prob), by.x="mrun", by.y="MRUN", all.x = TRUE)
+write.csv(df, file = "~/Dropbox/Mistakes/Code/R/recommendation/outputs/df_merge_recommendations.csv")
+```
+
+## ANAIS ISSUE
+```{r}
+rec <- read.csv(file = "/Users/iriosu/Dropbox/Mistakes in college admissions/mistakes_and_warnings/code/R/recommendation/outputs/df_merge_recommendations.csv")
+```
+
+```{r}
+df %>% group_by(general_message) %>% tally()
+rec %>% group_by(general_message) %>% tally()
+```
+
+```{r}
+appList <- read.csv('~/Dropbox/Mistakes/Code/R/analysis warnings/Data/AppList.csv', sep=',', header=TRUE)
+appRCT <- read.csv('~/Dropbox/Mistakes/Code/R/analysis warnings/Data/appRCT.csv', sep=',', header=TRUE)
+```
+
+```{r}
+colnames(appList)
+```
+
+```{r}
+colnames(appRCT)
+```
+
+```{r}
+appRCT$Strata_2
+```
+
+```{r}
+rec %>% filter(general_message == Strata_2)
+```
+
+```{r}
+rec <- merge(rec, appRCT %>% dplyr::select(mrun, Strata_2), by="mrun", all.x=TRUE)
+```
+
+mutate(general_message = ifelse(prob_1 == 1, 3, ifelse(overall_prob >= 0.7 & overall_prob < 1 & pace == 0, 2, ifelse(overall_prob < 0.7 & pace == 0, 1, 0)  )) )
+
+```{r}
+rec %>% filter(overall_prob >= 0.7 & overall_prob < 1 & pace == 0) %>% group_by(Strata_2) %>% tally()
+
+rec %>% filter(overall_prob >= 0.7 & overall_prob < 1 & pace == 0) %>% group_by(general_message) %>% tally()
+```
+
+
+
+
+
+
+
+```{r}
+an<- readRDS("/Users/iriosu/Dropbox/Mistakes Structural/Data/2021/application_before_and_after.rds")
+```
+
+```{r}
+colnames(an)
+```
+
+
+
+
+

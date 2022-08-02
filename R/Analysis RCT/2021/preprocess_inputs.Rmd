@@ -1,0 +1,108 @@
+---
+title: "Analysis"
+output:
+  pdf_document:
+    keep_tex:  true
+    latex_engine: xelatex
+  html_document: default
+---
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+rm(list=ls())
+gc()
+```
+
+```{r echo=FALSE, message=FALSE, results='hide'}
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+#library(rddtools)
+library(parallel)
+library(evd)  # \342\200\230~/R/x86_64-redhat-linux-gnu-library/3.5\342\200\231 (personal library in Hawk)
+library(magic)
+library(mvtnorm)
+library(LaplacesDemon)
+library(truncnorm)
+library(compiler)
+library(feather)
+library(magrittr)
+library(geosphere)
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(fastDummies)
+library(reshape2)
+library(corrplot)
+library(stargazer)
+library(stringr)
+library(ggplot2)
+```
+
+```{r}
+dropbox_dir = "~/Dropbox/"
+data_dir <- paste(dropbox_dir, 'Mistakes/Code/Python/Cartillas/data/2022/raw/', sep='')
+```
+
+# Crear archivo de oferta
+```{r}
+of <- read.csv(paste(data_dir, 'ACCESO_OFERTA_CENTRALIZADA-8691_V3.csv', sep=''), header=TRUE, sep=';')
+```
+
+```{r}
+colnames(of) <- c("CODIGO_SIES","CODIGO_DEMRE","COD_IES","UNIVERSIDAD","NOMBRE_CARRERA","NOMBRE_SEDE","PONDERACION_NEM","PONDERACION_RANKING","PONDERACION_C_LECTORA","PONDERACION_MATEMATICA","PONDERACION_CIENCIAS","PONDERACION_HISTORIA","PUNTAJE_PONDERADO_MINIMO","PUNTAJE_PROMEDIO_MINIMO","EXCLUSION_10_SUPERIOR","TIPO_POSTULACION","ULTIMO_SELECCIONADO_2020","ULTIMO_SELECCIONADO_2021","VACANTES_1_SEMESTRE","VACANTES_2_SEMESTRE","VACANTES_REGULARES_TOT","VACANTES_BEA","EXCLUY_PREFERENCIA","MAXIMO_POSTULACIONES","AREA_SIMULADOR","CARRERA_SIMULADOR","SOBRECUPO_1_SEMESTRE","SOBRECUPO_2_SEMESTRE")
+```
+
+```{r}
+sub_cols <- c("CODIGO_DEMRE", "UNIVERSIDAD","NOMBRE_CARRERA", "PONDERACION_NEM","PONDERACION_RANKING","PONDERACION_C_LECTORA","PONDERACION_MATEMATICA","PONDERACION_HISTORIA","PONDERACION_CIENCIAS", "PUNTAJE_PROMEDIO_MINIMO", "PUNTAJE_PONDERADO_MINIMO", "VACANTES_1_SEMESTRE", "SOBRECUPO_1_SEMESTRE", "VACANTES_2_SEMESTRE", "SOBRECUPO_2_SEMESTRE", "MAXIMO_POSTULACIONES", "EXCLUY_PREFERENCIA", "VACANTES_BEA")
+```
+
+```{r}
+car <- of %>% dplyr::select(sub_cols)
+car %<>% mutate(ANNO_EGRESO = 0, CAR_MIN_RKG = 0,
+                CDP_PUNTAJE_MIN_PEP = '', PO_ALTERNATIVA = ifelse(PONDERACION_HISTORIA > 0 & PONDERACION_CIENCIAS > 0, 'SI', 'NO'),
+                TIPO_PE = '', PRUEBA_ESPECIAL = '', CDP_PUNTAJE_MIN_PEP = '', PONDERACION_PE = '',
+                RESTRINGE_SEXO = ifelse(CODIGO_DEMRE %in% c(20056, 26045), 'F', ifelse(CODIGO_DEMRE %in% c(20061, 26047), 'M', '' ) ) )
+```
+
+```{r}
+pedagogias <- read.csv(paste(data_dir, 'ACCESO- PEDAGOGIAS.csv', sep=''), header=TRUE, sep=';')
+pedagogias$CAR_PEDAGOGIA <- 'S'
+pedagogias$SELECCION_PEDAGOGIA <- as.character(pedagogias$SELECCION_PEDAGOGIA)
+```
+
+
+
+```{r}
+car <- merge(car, pedagogias %>% dplyr::select(CODIGO_CARRERA, CAR_PEDAGOGIA, SELECCION_PEDAGOGIA) %>% dplyr::rename(TIPO_PEDAGOGIA = SELECCION_PEDAGOGIA), by.x="CODIGO_DEMRE", by.y="CODIGO_CARRERA", all.x=TRUE)
+car %<>% mutate(CAR_PEDAGOGIA = ifelse(is.na(CAR_PEDAGOGIA), 'N', CAR_PEDAGOGIA), 
+                TIPO_PEDAGOGIA = ifelse(is.na(TIPO_PEDAGOGIA), '', TIPO_PEDAGOGIA))
+```
+
+```{r}
+write.csv2(car %>% dplyr::select(c("CODIGO_DEMRE", "NOMBRE_CARRERA", "UNIVERSIDAD", "PONDERACION_NEM","PONDERACION_RANKING","PONDERACION_C_LECTORA","PONDERACION_MATEMATICA","PONDERACION_HISTORIA","PONDERACION_CIENCIAS", "PUNTAJE_PROMEDIO_MINIMO", "PUNTAJE_PONDERADO_MINIMO", "CDP_PUNTAJE_MIN_PEP", "VACANTES_1_SEMESTRE", "SOBRECUPO_1_SEMESTRE", "VACANTES_2_SEMESTRE", "SOBRECUPO_2_SEMESTRE", "RESTRINGE_SEXO", "PRUEBA_ESPECIAL", "TIPO_PE", "PONDERACION_PE", "PO_ALTERNATIVA", "MAXIMO_POSTULACIONES", "EXCLUY_PREFERENCIA", "VACANTES_BEA", "ANNO_EGRESO", "CAR_PEDAGOGIA", "CAR_MIN_RKG", "TIPO_PEDAGOGIA")), paste(data_dir, 'carreras.csv', sep=''), row.names=FALSE)
+```
+
+```{r}
+car %>% filter(CODIGO_DEMRE == 11045)
+```
+
+
+# Crear archivo de nombre, genero e id
+```{r}
+dat <- read.csv(paste(data_dir, "ArchivoB_2022_MRUN_nombre.csv", sep=""), header=TRUE, sep=';')
+dat$sexo <- as.character(dat$sexo)
+dat %<>% mutate(sexo = ifelse(sexo == '1', 'M', 'F'))
+```
+
+```{r}
+write.csv2(dat %>% dplyr::select(nombres, sexo, mrun), paste(data_dir, 'inscritos_y_sexo.csv', sep=''), row.names=FALSE)
+```
+
+
